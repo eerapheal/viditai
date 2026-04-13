@@ -8,6 +8,7 @@ import os
 import subprocess
 from typing import Optional
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 async def run_ffmpeg(*args: str, timeout: int = settings.JOB_TIMEOUT_SECONDS) -> str:
@@ -17,6 +18,7 @@ async def run_ffmpeg(*args: str, timeout: int = settings.JOB_TIMEOUT_SECONDS) ->
     Raises RuntimeError on non-zero exit.
     """
     cmd = [settings.FFMPEG_PATH, "-y", *args]
+    logger.debug(f"Executing: {' '.join(cmd)}")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -76,9 +78,9 @@ async def probe_video(file_path: str) -> dict:
         "has_audio": audio_stream is not None,
     }
 
-
 async def generate_thumbnail(input_path: str, output_path: str, timestamp: float = 1.0) -> None:
     """Extract a single frame as a JPEG thumbnail."""
+    logger.debug(f"Generating thumbnail for {input_path}")
     await run_ffmpeg(
         "-ss", str(timestamp),
         "-i", input_path,

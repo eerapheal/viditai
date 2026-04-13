@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
+from app.core.logging_config import logger
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -21,9 +22,14 @@ class Base(DeclarativeBase):
 
 async def init_db():
     """Create all tables on startup."""
-    async with engine.begin() as conn:
-        from app.models import user, video, job  # noqa: F401 — ensure models are registered
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            from app.models import user, video, job  # noqa: F401
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database schemas initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
 
 
 async def get_db():
@@ -32,8 +38,21 @@ async def get_db():
         try:
             yield session
             await session.commit()
-        except Exception:
+        except Exception as e:
+            logger.error(f"Database session error: {e}")
             await session.rollback()
             raise
         finally:
             await session.close()
+
+
+async def check_db_health() -> bool:
+    """Verify database connection is alive."""
+    try:
+        async with AsyncSessionLocal() as session:
+            from sqlalchemy import text
+            await session.execute(text("SELECT 1"))
+            return True
+    except Exception as e:
+        logger.warning(f"Database health check failed: {e}")
+        return False

@@ -16,6 +16,7 @@ from typing import Optional, Callable, Awaitable
 from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.models.job import ExportFormat
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 # Target dimensions per platform

@@ -18,6 +18,7 @@ from typing import Optional, Callable, Awaitable
 from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.services.silence_removal import apply_silence_removal
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 async def _detect_low_motion_scenes(input_path: str) -> list[tuple[float, float]]:

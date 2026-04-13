@@ -18,7 +18,9 @@ from sqlalchemy.orm import selectinload
 from app.core.database import AsyncSessionLocal
 from app.models.job import Job, JobType, JobStatus
 from app.models.user import Plan
+from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 async def _update_job(job_id: str, **fields) -> None:
@@ -45,10 +47,13 @@ async def _run_job(job_id: str) -> None:
         job = result.scalar_one_or_none()
 
     if not job:
+        logger.warning(f"Job {job_id} not found in worker")
         return
     if job.status == JobStatus.CANCELLED:
+        logger.info(f"Job {job_id} skipped (already cancelled)")
         return
 
+    logger.info(f"Worker processing job {job_id} ({job.job_type})")
     source_video_path: str = job.source_video.file_path
 
     # ── Mark as processing ────────────────────────────────────────────────────
@@ -71,6 +76,7 @@ async def _run_job(job_id: str) -> None:
 
         if job.job_type == JobType.PATTERN_CUT:
             from app.services.pattern_cut import apply_pattern_cut
+            logger.info(f"Applying pattern cut: {source_video_path} (keep: {params.get('keep_seconds')}s, cut: {params.get('cut_seconds')}s)")
             output_path = await apply_pattern_cut(
                 input_path=source_video_path,
                 keep_seconds=float(params.get("keep_seconds", 4)),
@@ -164,6 +170,7 @@ async def _run_job(job_id: str) -> None:
             output_size_bytes=output_size,
             output_duration_seconds=output_duration,
         )
+        logger.info(f"Job {job_id} completed successfully")
 
     except asyncio.CancelledError:
         await _update_job(

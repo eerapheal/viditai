@@ -14,6 +14,7 @@ from typing import Optional, Callable, Awaitable
 
 from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 def _seconds_to_srt_time(secs: float) -> str:
@@ -68,6 +69,7 @@ async def generate_subtitles(
         "segments": list[dict],
       }
     """
+    logger.info(f"Generating subtitles for: {input_path}")
     try:
         import whisper  # type: ignore
     except ImportError:

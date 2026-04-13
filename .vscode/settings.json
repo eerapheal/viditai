@@ -1,0 +1,14 @@
+{
+    "python.defaultInterpreterPath": "apps/api/.venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "apps/api",
+        "apps/api/app"
+    ],
+    "python.terminal.activateEnvInSelectedTerminal": true,
+    "python.envFile": "${workspaceFolder}/apps/api/.env",
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/*.pyc": true
+    }
+}

@@ -6,7 +6,7 @@ import uuid
 import shutil
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -17,6 +17,8 @@ from app.models.user import User
 from app.models.video import Video
 from app.schemas.video import VideoUploadResponse, VideoListItem, VideoDetail
 from app.services.ffmpeg import probe_video, generate_thumbnail
+from app.core.logging_config import logger
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -44,7 +46,9 @@ def _to_upload_response(video: Video) -> VideoUploadResponse:
 
 
 @router.post("/upload", response_model=VideoUploadResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def upload_video(
+    request: Request,
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -53,8 +57,8 @@ async def upload_video(
 ):
     """
     Upload a raw video file. Triggers auto-probe (duration, fps, resolution).
-    Returns video metadata immediately — processing jobs are submitted separately.
     """
+    logger.info(f"Starting upload: {file.filename} (user: {current_user.id})")
     # ── Validate MIME type ────────────────────────────────────────────────────
     if file.content_type not in settings.ALLOWED_VIDEO_TYPES:
         raise HTTPException(
@@ -136,6 +140,7 @@ async def upload_video(
     db.add(video)
     await db.flush()
 
+    logger.info(f"Upload complete: {video.id} ({video.duration_seconds}s)")
     return _to_upload_response(video)
 
 

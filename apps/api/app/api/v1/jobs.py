@@ -17,6 +17,9 @@ from app.models.job import Job, JobType, JobStatus
 from app.models.video import Video
 from app.schemas.job import JobCreate, JobResponse
 from app.worker import enqueue_job
+from app.core.logging_config import logger
+from app.core.limiter import limiter
+from fastapi import Request
 
 router = APIRouter()
 
@@ -75,7 +78,9 @@ async def _check_ai_access(user: User, job_type: JobType) -> None:
 
 
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("12/minute")
 async def create_job(
+    request: Request,
     body: JobCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -83,9 +88,8 @@ async def create_job(
 ):
     """
     Submit a new processing job for a video.
-    The job is queued immediately and processed asynchronously.
-    Poll GET /jobs/{id} for status updates.
     """
+    logger.info(f"Submitting {body.job_type} job for video {body.video_id} (user: {current_user.id})")
     # 1. Verify video ownership
     result = await db.execute(
         select(Video).where(Video.id == body.video_id, Video.owner_id == current_user.id)
@@ -202,6 +206,8 @@ async def cancel_job(
     job.status = JobStatus.CANCELLED
     job.completed_at = datetime.now(timezone.utc)
     await db.flush()
+    
+    logger.info(f"Job {job_id} cancelled by user")
 
     return _build_job_response(job)
 

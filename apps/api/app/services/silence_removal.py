@@ -19,6 +19,7 @@ from typing import Callable, Awaitable, Optional
 
 from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.core.config import settings
+from app.core.logging_config import logger
 
 
 def _parse_silence_log(log: str) -> list[tuple[float, float]]:
@@ -29,7 +30,8 @@ def _parse_silence_log(log: str) -> list[tuple[float, float]]:
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", log)]
     ends   = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", log)]
 
-    # Handle trailing silence (no silence_end for last segment)
+    # 2. Invert to keep list
+    logger.debug(f"Detected {len(starts)} silent segments. Inverting...")
     segments = []
     for i, start in enumerate(starts):
         end = ends[i] if i < len(ends) else None
@@ -78,6 +80,7 @@ async def apply_silence_removal(
     Remove silent segments from a video.
     Returns path to the processed output file.
     """
+    logger.info(f"Applying silence removal: {input_path}")
     info = await probe_video(input_path)
     total_duration = info["duration_seconds"]
 
@@ -88,6 +91,7 @@ async def apply_silence_removal(
         await progress_cb(5)
 
     # ── Step 1: detect silence ────────────────────────────────────────────────
+    logger.debug("Phase 1: Detecting silence intervals...")
     # We pipe to /dev/null; the silence log comes through stderr
     silence_log = await run_ffmpeg(
         "-i", input_path,
@@ -132,6 +136,11 @@ async def apply_silence_removal(
             f.write(f"outpoint {seg_end:.6f}\n")
 
     try:
+        if progress_cb:
+            await progress_cb(10)
+
+        # 4. Run FFmpeg concat
+        logger.debug(f"Phase 2: Concatenating {len(speech_segs)} kept segments...")
         await run_ffmpeg(
             "-f", "concat",
             "-safe", "0",
