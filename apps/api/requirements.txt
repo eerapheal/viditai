@@ -1,0 +1,39 @@
+# ── Core API framework ────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9          # file upload support
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.30
+aiosqlite==0.20.0                # async SQLite driver (dev/MVP)
+# For production Postgres, replace aiosqlite with:
+# asyncpg==0.29.0
+# DATABASE_URL=postgresql+asyncpg://user:pass@host/db
+
+# ── Auth & Security ───────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0  # JWT
+passlib[bcrypt]==1.7.4            # password hashing
+cryptography==42.0.7
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+pydantic==2.7.1
+pydantic-settings==2.2.1
+pydantic[email]==2.7.1            # EmailStr validation
+
+# ── Video processing ──────────────────────────────────────────────────────────
+# FFmpeg must be installed separately on the OS (not a Python package).
+# Windows:  winget install ffmpeg  (or download from https://ffmpeg.org)
+# macOS:    brew install ffmpeg
+# Ubuntu:   sudo apt install ffmpeg
+
+# ── AI / ML (optional — enable for Pro/AI features) ──────────────────────────
+# Uncomment to enable Whisper transcription & filler-word removal:
+# openai-whisper==20231117
+
+# Uncomment to enable scene detection (low-motion removal):
+# scenedetect[opencv]==0.6.3
+
+# ── Development utilities ─────────────────────────────────────────────────────
+httpx==0.27.0                    # for testing FastAPI routes
+pytest==8.2.0
+pytest-asyncio==0.23.6

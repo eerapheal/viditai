@@ -1,0 +1,231 @@
+"""
+Job endpoints — create, status, list, cancel, download
+Background processing is handled by the worker (app/worker.py).
+"""
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+import uuid
+from datetime import datetime, timezone
+
+from app.core.database import get_db
+from app.core.auth import get_current_user
+from app.core.config import settings
+from app.models.user import User, Plan
+from app.models.job import Job, JobType, JobStatus
+from app.models.video import Video
+from app.schemas.job import JobCreate, JobResponse
+from app.worker import enqueue_job
+
+router = APIRouter()
+
+
+def _build_job_response(job: Job) -> JobResponse:
+    download_url = None
+    if job.status == JobStatus.COMPLETED and job.output_filename:
+        download_url = f"/files/output/{job.output_filename}"
+    return JobResponse(
+        id=job.id,
+        job_type=job.job_type,
+        status=job.status,
+        progress_pct=job.progress_pct,
+        parameters=job.parameters,
+        error_message=job.error_message,
+        output_filename=job.output_filename,
+        output_duration_seconds=job.output_duration_seconds,
+        output_size_bytes=job.output_size_bytes,
+        has_watermark=job.has_watermark,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        download_url=download_url,
+    )
+
+
+async def _check_quota(user: User, db: AsyncSession) -> None:
+    """Raise 403 if the free user has exhausted their monthly exports."""
+    if user.plan != Plan.FREE:
+        return
+
+    now = datetime.now(timezone.utc)
+    # Roll over monthly counter
+    if now.year > user.exports_reset_at.year or now.month > user.exports_reset_at.month:
+        user.monthly_exports_used = 0
+        user.exports_reset_at = now
+
+    if user.monthly_exports_used >= settings.FREE_MONTHLY_EXPORTS:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"Free plan allows {settings.FREE_MONTHLY_EXPORTS} exports per month. "
+                "Upgrade to Pro for unlimited exports."
+            ),
+        )
+
+
+async def _check_ai_access(user: User, job_type: JobType) -> None:
+    """Block free users from AI-tier job types."""
+    ai_types = {JobType.AI_SMART_CUT, JobType.SUBTITLE_GENERATION}
+    if job_type in ai_types and user.plan == Plan.FREE:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="AI features require a Pro or Business plan.",
+        )
+
+
+@router.post("/", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+async def create_job(
+    body: JobCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Submit a new processing job for a video.
+    The job is queued immediately and processed asynchronously.
+    Poll GET /jobs/{id} for status updates.
+    """
+    # 1. Verify video ownership
+    result = await db.execute(
+        select(Video).where(Video.id == body.video_id, Video.owner_id == current_user.id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
+
+    # 2. Plan checks
+    await _check_quota(current_user, db)
+    await _check_ai_access(current_user, body.job_type)
+
+    # 3. Create job record
+    job = Job(
+        id=str(uuid.uuid4()),
+        owner_id=current_user.id,
+        source_video_id=video.id,
+        job_type=body.job_type,
+        status=JobStatus.PENDING,
+        parameters=body.parameters,
+        has_watermark=(current_user.plan == Plan.FREE),
+        progress_pct=0,
+    )
+    db.add(job)
+    await db.flush()
+
+    # 4. Bump usage counter
+    current_user.monthly_exports_used += 1
+    await db.flush()
+
+    # 5. Dispatch to background worker
+    background_tasks.add_task(enqueue_job, job.id)
+
+    return _build_job_response(job)
+
+
+@router.get("/", response_model=dict)
+async def list_jobs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    video_id: Optional[str] = Query(None),
+    job_type: Optional[JobType] = Query(None),
+    job_status: Optional[JobStatus] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all jobs for the authenticated user (paginated, filterable)."""
+    offset = (page - 1) * page_size
+
+    query = select(Job).where(Job.owner_id == current_user.id)
+    if video_id:
+        query = query.where(Job.source_video_id == video_id)
+    if job_type:
+        query = query.where(Job.job_type == job_type)
+    if job_status:
+        query = query.where(Job.status == job_status)
+
+    count_q = select(func.count(Job.id)).where(Job.owner_id == current_user.id)
+    if video_id:
+        count_q = count_q.where(Job.source_video_id == video_id)
+    if job_type:
+        count_q = count_q.where(Job.job_type == job_type)
+    if job_status:
+        count_q = count_q.where(Job.status == job_status)
+
+    total = (await db.execute(count_q)).scalar_one()
+    jobs = (await db.execute(query.order_by(Job.created_at.desc()).offset(offset).limit(page_size))).scalars().all()
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": (total + page_size - 1) // page_size,
+        "items": [_build_job_response(j).model_dump() for j in jobs],
+    }
+
+
+@router.get("/{job_id}", response_model=JobResponse)
+async def get_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the current status and result of a single job."""
+    result = await db.execute(
+        select(Job).where(Job.id == job_id, Job.owner_id == current_user.id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return _build_job_response(job)
+
+
+@router.post("/{job_id}/cancel", response_model=JobResponse)
+async def cancel_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel a pending or processing job."""
+    result = await db.execute(
+        select(Job).where(Job.id == job_id, Job.owner_id == current_user.id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+
+    if job.status not in (JobStatus.PENDING, JobStatus.PROCESSING):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot cancel a job that is already {job.status}.",
+        )
+
+    job.status = JobStatus.CANCELLED
+    job.completed_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    return _build_job_response(job)
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a job record and its output file."""
+    import os
+    result = await db.execute(
+        select(Job).where(Job.id == job_id, Job.owner_id == current_user.id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+
+    if job.output_file_path and os.path.exists(job.output_file_path):
+        try:
+            os.remove(job.output_file_path)
+        except OSError:
+            pass
+
+    await db.delete(job)
+    await db.flush()
