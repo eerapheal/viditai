@@ -35,6 +35,24 @@ def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_password_reset_token(user_id: str) -> str:
+    """Generate a token valid for 15 minutes."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    payload = {"sub": user_id, "exp": expire, "type": "password_reset"}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def verify_password_reset_token(token: str) -> Optional[str]:
+    """Verify reset token and return user_id."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+
 def decode_access_token(token: str) -> str:
     """Returns user_id (sub) or raises HTTPException 401."""
     try:

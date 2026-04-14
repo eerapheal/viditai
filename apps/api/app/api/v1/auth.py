@@ -8,9 +8,16 @@ import uuid
 from datetime import datetime, timezone
 
 from app.core.database import get_db
-from app.core.auth import hash_password, verify_password, create_access_token, get_current_user
+from app.core.auth import (
+    hash_password, verify_password, create_access_token, get_current_user,
+    create_password_reset_token, verify_password_reset_token
+)
 from app.models.user import User, Plan
-from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserPublic, UserUpdate
+from app.schemas.user import (
+    UserRegister, UserLogin, TokenResponse, UserPublic, UserUpdate,
+    PasswordResetRequest, PasswordResetConfirm
+)
+from app.core.logging_config import logger
 
 router = APIRouter()
 
@@ -66,3 +73,40 @@ async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the authenticated user's profile."""
     return UserPublic.model_validate(current_user)
+
+
+@router.post("/password-reset-request")
+async def request_password_reset(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+    """Generate a reset token and 'send' it to the user."""
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        token = create_password_reset_token(user.id)
+        # In a real app, send an email here. For this demo, we log it.
+        logger.info(f"PASSWORD RESET REQUEST: User {user.email}, Token: {token}")
+    
+    # Always return 200 to prevent email enumeration
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/password-reset-confirm")
+async def confirm_password_reset(body: PasswordResetConfirm, db: AsyncSession = Depends(get_db)):
+    """Change password using a valid reset token."""
+    user_id = verify_password_reset_token(body.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token."
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+    
+    logger.info(f"PASSWORD RESET SUCCESSFUL: User {user.email}")
+    return {"message": "Password updated successfully."}
