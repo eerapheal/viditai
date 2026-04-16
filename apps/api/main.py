@@ -28,7 +28,14 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # Initialise database tables
     await init_db()
-    logger.info("Application started — Database initialized")
+    
+    # Seed default presets
+    from app.api.v1.presets import seed_default_presets
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        await seed_default_presets(db)
+        
+    logger.info("Application started — Database initialized and seeded")
     yield
     logger.info("Application shutting down")
     # Cleanup on shutdown (optional: purge temp files)

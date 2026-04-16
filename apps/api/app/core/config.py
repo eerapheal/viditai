@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # ── Processing ────────────────────────────────────────────────────────────
     FFMPEG_PATH: str = "ffmpeg"       # override if not on PATH
+    FFPROBE_PATH: str = "ffprobe"     # override if not on PATH
     MAX_CONCURRENT_JOBS: int = 4
     JOB_TIMEOUT_SECONDS: int = 600    # 10 min per job
 

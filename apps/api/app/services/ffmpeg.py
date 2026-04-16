@@ -42,33 +42,55 @@ async def probe_video(file_path: str) -> dict:
       duration, width, height, fps, has_audio
     """
     cmd = [
-        "ffprobe", "-v", "quiet",
+        settings.FFPROBE_PATH, "-v", "error",  # Changed quiet to error to see some output if needed
         "-print_format", "json",
         "-show_streams", "-show_format",
         file_path,
     ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffprobe failed: {stderr.decode()}")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"ffprobe not found at '{settings.FFPROBE_PATH}'. "
+            "Please install FFmpeg and ensure ffprobe is in your PATH or configured in .env"
+        )
 
-    data = json.loads(stdout.decode())
+    if proc.returncode != 0:
+        error_msg = stderr.decode().strip()
+        raise RuntimeError(f"ffprobe failed (exit {proc.returncode}): {error_msg}")
+
+    output_str = stdout.decode().strip()
+    if not output_str:
+        raise RuntimeError("ffprobe returned empty output. The file might be corrupt or an invalid video format.")
+
+    try:
+        data = json.loads(output_str)
+    except json.JSONDecodeError:
+        raise RuntimeError(f"Failed to parse ffprobe output as JSON. Output: {output_str[:100]}...")
+
     video_stream = next((s for s in data.get("streams", []) if s["codec_type"] == "video"), None)
     audio_stream = next((s for s in data.get("streams", []) if s["codec_type"] == "audio"), None)
 
+    if not video_stream:
+        raise RuntimeError("No video stream found in file. It might be an audio-only file or corrupted.")
+
     duration = float(data.get("format", {}).get("duration", 0) or 0)
-    width = int(video_stream.get("width", 0)) if video_stream else None
-    height = int(video_stream.get("height", 0)) if video_stream else None
+    width = int(video_stream.get("width", 0)) if video_stream else 0
+    height = int(video_stream.get("height", 0)) if video_stream else 0
 
     fps = None
     if video_stream:
         r_frame_rate = video_stream.get("r_frame_rate", "0/1")
-        num, den = r_frame_rate.split("/")
-        fps = round(int(num) / int(den), 3) if int(den) != 0 else None
+        try:
+            num, den = r_frame_rate.split("/")
+            fps = round(int(num) / int(den), 3) if int(den) != 0 else None
+        except (ValueError, ZeroDivisionError):
+            fps = None
 
     return {
         "duration_seconds": duration,

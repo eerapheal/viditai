@@ -94,8 +94,11 @@ async def upload_video(
         meta = await probe_video(file_path)
     except Exception as exc:
         os.remove(file_path)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail=f"Could not read video metadata: {exc}")
+        logger.error(f"Metadata extraction failed: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Metadata Error: {str(exc)}"
+        )
 
     # ── Enforce free plan duration cap ────────────────────────────────────────
     from app.models.user import Plan

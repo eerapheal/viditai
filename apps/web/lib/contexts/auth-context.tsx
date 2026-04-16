@@ -13,6 +13,8 @@ export interface User {
   avatar_url: string | null;
   role: UserRole;
   plan: string;
+  monthly_exports_used: number;
+  exports_reset_at: string;
   is_active: boolean;
 }
 

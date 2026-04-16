@@ -50,7 +50,12 @@ class Video(Base):
 
     # ── Relationships ──────────────────────────────────────────────────────────
     owner: Mapped["User"] = relationship("User", back_populates="videos")  # noqa: F821
-    jobs: Mapped[list["Job"]] = relationship("Job", back_populates="source_video", cascade="all, delete-orphan")  # noqa: F821
+    jobs: Mapped[list["Job"]] = relationship(
+        "Job", 
+        back_populates="source_video", 
+        cascade="all, delete-orphan",
+        foreign_keys="[Job.source_video_id]"
+    )  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<Video {self.original_filename} ({self.duration_seconds}s)>"

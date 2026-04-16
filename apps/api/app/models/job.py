@@ -78,7 +78,11 @@ class Job(Base):
 
     # ── Relationships ──────────────────────────────────────────────────────────
     owner: Mapped["User"] = relationship("User", back_populates="jobs")  # noqa: F821
-    source_video: Mapped["Video"] = relationship("Video", back_populates="jobs")  # noqa: F821
+    source_video: Mapped["Video"] = relationship(
+        "Video", 
+        back_populates="jobs", 
+        foreign_keys=[source_video_id]
+    )  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<Job {self.job_type} [{self.status}] {self.progress_pct}%>"
