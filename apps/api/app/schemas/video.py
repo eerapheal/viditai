@@ -1,21 +1,27 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+from app.models.video import VideoType
 
 
 class VideoUploadResponse(BaseModel):
-    id: str
+    video_id: str
     original_filename: str
     file_size_bytes: int
-    duration_seconds: Optional[float]
+    duration: Optional[float]
     width: Optional[int]
     height: Optional[int]
-    fps: Optional[float]
     has_audio: Optional[bool]
+    status: str = "uploaded"
     thumbnail_url: Optional[str]
     created_at: datetime
 
     model_config = {"from_attributes": True}
+    
+    # Keep compatibility with existing code during migration if needed
+    @property
+    def id(self) -> str:
+        return self.video_id
 
 
 class VideoListItem(BaseModel):
@@ -33,18 +39,22 @@ class VideoListItem(BaseModel):
 
 class VideoDetail(BaseModel):
     """Full video detail — returned by GET /videos/{id}."""
-    id: str
+    video_id: str
     original_filename: str
     title: Optional[str]
     description: Optional[str]
     file_size_bytes: int
     mime_type: str
-    duration_seconds: Optional[float]
+    duration: Optional[float]
     width: Optional[int]
     height: Optional[int]
     fps: Optional[float]
     has_audio: Optional[bool]
     thumbnail_url: Optional[str]
+    type: VideoType
+    source_video_id: Optional[str] = None
+    download_url: Optional[str] = None
+    export_format: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

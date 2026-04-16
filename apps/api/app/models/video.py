@@ -1,9 +1,16 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+import enum
+
+class VideoType(str, enum.Enum):
+    UPLOADED = "uploaded"
+    PROCESSED = "processed"
 
 
 class Video(Base):
@@ -29,6 +36,11 @@ class Video(Base):
 
     title: Mapped[str] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # ── Lineage ───────────────────────────────────────────────────────────────
+    type: Mapped[VideoType] = mapped_column(SAEnum(VideoType), default=VideoType.UPLOADED, nullable=False)
+    source_video_id: Mapped[str] = mapped_column(String(36), ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
+    processing_job_id: Mapped[str] = mapped_column(String(36), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

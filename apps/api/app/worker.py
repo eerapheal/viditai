@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
-from app.models.job import Job, JobType, JobStatus
+from app.models.job import Job, JobType, JobStatus, RiskLevel
 from app.models.user import Plan
 from app.services.ffmpeg import run_ffmpeg, probe_video
 from app.core.config import settings
@@ -143,6 +143,27 @@ async def _run_job(job_id: str) -> None:
             watermarked_path = await _apply_watermark(output_path)
             os.replace(watermarked_path, output_path)
 
+        # ── Audio Processing & Risk Analysis ──────────────────────────────
+        risk_level = RiskLevel.LOW
+        audio_mode = params.get("audio", {}).get("mode", "original") if isinstance(params.get("audio"), dict) else params.get("audio_mode", "original")
+        
+        if output_path and os.path.exists(output_path) and output_path.endswith(".mp4"):
+            if audio_mode == "mute":
+                output_path = await _mute_audio(output_path)
+                risk_level = RiskLevel.LOW
+            elif audio_mode == "replace":
+                # Assuming library_track is provided or use a dummy
+                library_track = params.get("audio", {}).get("library_track") or params.get("library_track")
+                if library_track:
+                    output_path = await _replace_audio(output_path, library_track)
+                risk_level = RiskLevel.MEDIUM
+            else:
+                # original audio kept
+                if job.job_type in (JobType.PATTERN_CUT, JobType.SOCIAL_EXPORT):
+                    risk_level = RiskLevel.HIGH
+                else:
+                    risk_level = RiskLevel.MEDIUM  # smarter cuts are slightly safer
+        
         # ── Collect output metadata ───────────────────────────────────────────
         output_filename = os.path.basename(output_path) if output_path else None
         output_size = (
@@ -169,6 +190,8 @@ async def _run_job(job_id: str) -> None:
             output_filename=output_filename,
             output_size_bytes=output_size,
             output_duration_seconds=output_duration,
+            risk_level=risk_level,
+            risk_details={"audio_mode": audio_mode, "transformation": job.job_type.value}
         )
         logger.info(f"Job {job_id} completed successfully")
 
@@ -209,6 +232,29 @@ async def _apply_watermark(input_path: str) -> str:
         output_path,
     )
     return output_path
+
+
+async def _mute_audio(input_path: str) -> str:
+    """Strip all audio tracks from the video."""
+    output_path = input_path.replace(".mp4", "_muted.mp4")
+    await run_ffmpeg("-i", input_path, "-an", "-c:v", "copy", output_path)
+    os.replace(output_path, input_path)  # Overwrite original processed file
+    return input_path
+
+
+async def _replace_audio(input_path: str, audio_source: str) -> str:
+    """Replace original audio with a new track, looping if necessary."""
+    output_path = input_path.replace(".mp4", "_remixed.mp4")
+    # audio_source could be a local path or URL (FFmpeg handles both)
+    await run_ffmpeg(
+        "-i", input_path,
+        "-stream_loop", "-1", "-i", audio_source,
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "copy", "-c:a", "aac", "-shortest",
+        output_path
+    )
+    os.replace(output_path, input_path)
+    return input_path
 
 
 def enqueue_job(job_id: str) -> None:

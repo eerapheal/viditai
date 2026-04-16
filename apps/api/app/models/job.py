@@ -23,6 +23,12 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class RiskLevel(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class ExportFormat(str, enum.Enum):
     MP4_HD = "mp4_hd"
     TIKTOK = "tiktok"           # 9:16, 1080x1920
@@ -48,11 +54,18 @@ class Job(Base):
     # Social export: {"format": "tiktok", "add_captions": true, "face_zoom": true}
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
+    preset_id: Mapped[str] = mapped_column(String(64), nullable=True)
+
     # ── Output ────────────────────────────────────────────────────────────────
     output_file_path: Mapped[str] = mapped_column(String(1024), nullable=True)
     output_filename: Mapped[str] = mapped_column(String(512), nullable=True)
+    output_video_id: Mapped[str] = mapped_column(String(36), ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
     output_duration_seconds: Mapped[float] = mapped_column(Float, nullable=True)
     output_size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    # ── Risk Analysis ─────────────────────────────────────────────────────────
+    risk_level: Mapped[RiskLevel] = mapped_column(SAEnum(RiskLevel), default=RiskLevel.LOW, nullable=False)
+    risk_details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # ── Progress & error tracking ─────────────────────────────────────────────
     progress_pct: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

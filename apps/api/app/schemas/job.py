@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal, Any
 from datetime import datetime
-from app.models.job import JobType, JobStatus, ExportFormat
+from app.models.job import JobType, JobStatus, ExportFormat, RiskLevel
 
 
 # ── Pattern Cut ───────────────────────────────────────────────────────────────
@@ -38,11 +38,36 @@ class SocialExportParams(BaseModel):
     add_watermark_text: Optional[str] = None
 
 
+# ── Unified Job Settings ───────────────────────────────────────────────────
+
+class CutPattern(BaseModel):
+    keep: float
+    remove: float
+
+class AudioSettings(BaseModel):
+    mode: str  # "mute", "replace", "original"
+    library_track: Optional[str] = None
+
+class JobSettings(BaseModel):
+    cut_pattern: Optional[CutPattern] = None
+    audio: Optional[AudioSettings] = None
+    captions: bool = False
+    ai_voiceover: bool = False
+    export_format: str = "9:16"
+    zoom_effects: bool = False
+
+class RiskDetails(BaseModel):
+    audio_detected: bool = False
+    transformation_score: float = 0.0
+
+
 # ── Generic Job Request ───────────────────────────────────────────────────────
 
 class JobCreate(BaseModel):
     video_id: str
-    job_type: JobType
+    preset_id: Optional[str] = None
+    job_type: Optional[JobType] = JobType.PATTERN_CUT
+    settings: Optional[JobSettings] = None
     parameters: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -62,9 +87,16 @@ class JobCreate(BaseModel):
 # ── Job Response ──────────────────────────────────────────────────────────────
 
 class JobResponse(BaseModel):
+    job_id: str  # maps from 'id'
+    status: JobStatus
+    progress: int  # maps from 'progress_pct'
+    output_video_id: Optional[str] = None
+    risk_level: RiskLevel = RiskLevel.LOW
+    risk_details: dict = Field(default_factory=dict)
+    
+    # Keeping old fields for backend compatibility
     id: str
     job_type: JobType
-    status: JobStatus
     progress_pct: int
     parameters: dict
     error_message: Optional[str]
@@ -75,8 +107,20 @@ class JobResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
-
-    # computed
     download_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "id" in data and "job_id" not in data:
+                data["job_id"] = data["id"]
+            if "progress_pct" in data and "progress" not in data:
+                data["progress"] = data["progress_pct"]
+        elif hasattr(data, "id"):
+            # This is roughly what Pydantic does with from_attributes=True
+            # but we can explicitly set these for easier access
+            pass
+        return data

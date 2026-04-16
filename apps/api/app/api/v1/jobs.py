@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.models.user import User, Plan
 from app.models.job import Job, JobType, JobStatus
 from app.models.video import Video
+from app.models.preset import Preset
 from app.schemas.job import JobCreate, JobResponse
 from app.worker import enqueue_job
 from app.core.logging_config import logger
@@ -102,14 +103,32 @@ async def create_job(
     await _check_quota(current_user, db)
     await _check_ai_access(current_user, body.job_type)
 
-    # 3. Create job record
+    # 3. Handle Presets
+    final_params = body.parameters or {}
+    job_type = body.job_type
+
+    if body.preset_id:
+        result = await db.execute(select(Preset).where(Preset.id == body.preset_id))
+        preset = result.scalar_one_or_none()
+        if not preset:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Preset '{body.preset_id}' not found.")
+        
+        # Merge preset parameters (preset takes precedence for job_type, but user can override params)
+        job_type = preset.job_type
+        # Default parameters from preset, then override with user parameters
+        merged_params = preset.parameters.copy()
+        merged_params.update(final_params)
+        final_params = merged_params
+
+    # 4. Create job record
     job = Job(
         id=str(uuid.uuid4()),
         owner_id=current_user.id,
         source_video_id=video.id,
-        job_type=body.job_type,
+        job_type=job_type,
         status=JobStatus.PENDING,
-        parameters=body.parameters,
+        parameters=final_params,
+        preset_id=body.preset_id,
         has_watermark=(current_user.plan == Plan.FREE),
         progress_pct=0,
     )
