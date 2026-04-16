@@ -11,10 +11,12 @@ import { ModernInput } from '@/components/ui/ModernInput';
 import { AIButton } from '@/components/ui/AIButton';
 import { AnimatedOrb } from '@/components/ui/AnimatedOrb';
 import { loginSchema, LoginFormValues } from '@/lib/auth-schemas';
-import { apiRequest, saveToken } from '@/lib/api';
+import { apiRequest } from '@/lib/api';
+import { useAuth } from '@/lib/contexts/auth-context';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -37,10 +39,9 @@ export default function LoginScreen() {
         body: JSON.stringify(data),
       });
 
-      await saveToken(result.access_token);
+      await login(result.access_token, result.user);
       
-      // Navigate to tabs/index
-      router.replace('/(tabs)');
+      // The _layout will handle redirect to (tabs) automatically via useAuth state change
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.message || 'Login failed');

@@ -9,6 +9,47 @@ const PROD_API_URL = 'https://api.viditai.com/api/v1'; // Placeholder
 export const API_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;
 
 const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+
+export async function saveUser(user: any) {
+  try {
+    const userStr = JSON.stringify(user);
+    if (Platform.OS === 'web') {
+      localStorage.setItem(USER_KEY, userStr);
+    } else {
+      await SecureStore.setItemAsync(USER_KEY, userStr);
+    }
+  } catch (error) {
+    console.error('Error saving user:', error);
+  }
+}
+
+export async function getUser() {
+  try {
+    let userStr: string | null = null;
+    if (Platform.OS === 'web') {
+      userStr = localStorage.getItem(USER_KEY);
+    } else {
+      userStr = await SecureStore.getItemAsync(USER_KEY);
+    }
+    return userStr ? JSON.parse(userStr) : null;
+  } catch (error) {
+    console.error('Error getting user:', error);
+    return null;
+  }
+}
+
+export async function deleteUser() {
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(USER_KEY);
+    } else {
+      await SecureStore.deleteItemAsync(USER_KEY);
+    }
+  } catch (error) {
+    console.error('Error deleting user:', error);
+  }
+}
 
 export async function saveToken(token: string) {
   try {
