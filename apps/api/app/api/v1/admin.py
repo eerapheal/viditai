@@ -8,30 +8,20 @@ from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
-from app.models.user import User, Plan
+from app.core.auth import get_current_user, get_current_admin, get_current_super_admin
+from app.models.user import User, Plan, UserRole
 from app.models.video import Video
 from app.models.job import Job, JobStatus
-from app.schemas.user import UserPublic
+from app.schemas.user import UserPublic, UserRoleUpdate, UserPlanUpdate
 
 router = APIRouter()
-
-
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency: only BUSINESS plan users can access admin routes."""
-    if current_user.plan != Plan.BUSINESS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access requires a Business plan.",
-        )
-    return current_user
 
 
 # ── Platform-wide statistics ──────────────────────────────────────────────────
 
 @router.get("/stats")
 async def platform_stats(
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Overall platform statistics."""
@@ -78,7 +68,7 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     plan: Optional[Plan] = Query(None),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all platform users (admin view)."""
@@ -106,8 +96,8 @@ async def list_users(
 @router.patch("/users/{user_id}/plan")
 async def update_user_plan(
     user_id: str,
-    new_plan: Plan,
-    _admin: User = Depends(require_admin),
+    body: UserPlanUpdate,
+    _admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Upgrade or downgrade any user's plan."""
@@ -117,18 +107,18 @@ async def update_user_plan(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     old_plan = user.plan
-    user.plan = new_plan
+    user.plan = body.new_plan
     await db.flush()
     return {"user_id": user_id, "old_plan": old_plan, "new_plan": new_plan, "success": True}
 
 
-@router.patch("/users/{user_id}/disable")
-async def disable_user(
+@router.patch("/users/{user_id}/suspend")
+async def suspend_user(
     user_id: str,
-    _admin: User = Depends(require_admin),
+    _super_admin: User = Depends(get_current_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Deactivate a user account."""
+    """Deactivate a user account. Restricted to SUPER_ADMIN."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -137,3 +127,61 @@ async def disable_user(
     user.is_active = False
     await db.flush()
     return {"user_id": user_id, "is_active": False, "success": True}
+
+
+@router.patch("/users/{user_id}/activate")
+async def activate_user(
+    user_id: str,
+    _super_admin: User = Depends(get_current_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reactivate a user account. Restricted to SUPER_ADMIN."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    user.is_active = True
+    await db.flush()
+    return {"user_id": user_id, "is_active": True, "success": True}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    _super_admin: User = Depends(get_current_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a user and all their data. Restricted to SUPER_ADMIN."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    await db.delete(user)
+    await db.flush()
+    return {"user_id": user_id, "deleted": True, "success": True}
+
+
+@router.patch("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    body: UserRoleUpdate,
+    _super_admin: User = Depends(get_current_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change any user's role. Restricted to SUPER_ADMIN."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    old_role = user.role
+    user.role = body.new_role
+    await db.flush()
+    return {
+        "user_id": user_id,
+        "old_role": old_role,
+        "new_role": body.new_role,
+        "success": True
+    }

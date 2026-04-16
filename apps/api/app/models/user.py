@@ -13,6 +13,12 @@ class Plan(str, enum.Enum):
     BUSINESS = "business"
 
 
+class UserRole(str, enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -23,6 +29,7 @@ class User(Base):
     avatar_url: Mapped[str] = mapped_column(String(512), nullable=True)
 
     plan: Mapped[Plan] = mapped_column(SAEnum(Plan), default=Plan.FREE, nullable=False)
+    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.USER, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

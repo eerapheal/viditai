@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
-from app.models.user import Plan
+from app.models.user import Plan, UserRole
 
 
 class UserRegister(BaseModel):
@@ -27,6 +27,8 @@ class UserPublic(BaseModel):
     full_name: Optional[str]
     avatar_url: Optional[str]
     plan: Plan
+    role: UserRole
+    is_active: bool
     is_verified: bool
     monthly_exports_used: int
     created_at: datetime
@@ -46,3 +48,11 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetConfirm(BaseModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class UserRoleUpdate(BaseModel):
+    new_role: UserRole
+
+
+class UserPlanUpdate(BaseModel):
+    new_plan: Plan

@@ -3,7 +3,7 @@ Auth endpoints — register, login, refresh, logout
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 import uuid
 from datetime import datetime, timezone
 
@@ -12,7 +12,7 @@ from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
     create_password_reset_token, verify_password_reset_token
 )
-from app.models.user import User, Plan
+from app.models.user import User, Plan, UserRole
 from app.schemas.user import (
     UserRegister, UserLogin, TokenResponse, UserPublic, UserUpdate,
     PasswordResetRequest, PasswordResetConfirm
@@ -24,7 +24,7 @@ router = APIRouter()
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
-    """Create a new free-tier account."""
+    """Create a new account. The first user becomes SUPER_ADMIN."""
     # Check for duplicate email
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -33,21 +33,26 @@ async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
             detail="An account with this email already exists.",
         )
 
+    # Check if this is the first user
+    user_count = await db.execute(select(func.count(User.id)))
+    is_first_user = user_count.scalar_one() == 0
+    role = UserRole.SUPER_ADMIN if is_first_user else UserRole.USER
+
     user = User(
         id=str(uuid.uuid4()),
         email=body.email,
         hashed_password=hash_password(body.password),
         full_name=body.full_name,
         plan=Plan.FREE,
+        role=role,
         is_active=True,
         is_verified=False,
         monthly_exports_used=0,
         exports_reset_at=datetime.now(timezone.utc),
     )
-    db.add(user)
     await db.flush()
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, user.role.value)
     return TokenResponse(access_token=token, token_type="bearer", user=UserPublic.model_validate(user))
 
 
@@ -65,7 +70,7 @@ async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled.")
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, user.role.value)
     return TokenResponse(access_token=token, token_type="bearer", user=UserPublic.model_validate(user))
 
 

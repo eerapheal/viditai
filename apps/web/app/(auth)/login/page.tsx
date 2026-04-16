@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ModernInput } from "@/components/ui/ModernInput";
 import { AIButton } from "@/components/ui/AIButton";
+import { useAuth } from "@/lib/contexts/auth-context";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -22,6 +23,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -48,8 +50,7 @@ export default function LoginPage() {
       }
 
       toast.success("Welcome back!");
-      localStorage.setItem("token", result.access_token);
-      router.push("/dashboard");
+      login(result.access_token, result.user);
     } catch (error: any) {
       toast.error(error.message);
     } finally {

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 bearer_scheme = HTTPBearer()
@@ -27,11 +27,11 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT helpers ───────────────────────────────────────────────────────────────
 
-def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(user_id: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    payload = {"sub": user_id, "exp": expire}
+    payload = {"sub": user_id, "role": role, "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -98,3 +98,20 @@ async def get_current_user_optional(
         return await get_current_user(credentials, db)
     except HTTPException:
         return None
+
+
+def require_role(roles: list[UserRole]):
+    """Generic role requirement dependency."""
+    async def role_dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Resource requires one of these roles: {', '.join(roles)}"
+            )
+        return current_user
+    return role_dependency
+
+
+# Convenience shortcuts
+get_current_admin = require_role([UserRole.ADMIN, UserRole.SUPER_ADMIN])
+get_current_super_admin = require_role([UserRole.SUPER_ADMIN])

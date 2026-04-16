@@ -12,6 +12,7 @@ const geistMono = localFont({
 });
 
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/lib/contexts/auth-context";
 
 export const metadata: Metadata = {
   title: "AutoCut AI | Smart Video Editing",
@@ -26,7 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <Toaster position="top-center" richColors theme="dark" />
       </body>
     </html>
