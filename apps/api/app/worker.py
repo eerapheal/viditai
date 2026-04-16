@@ -143,27 +143,53 @@ async def _run_job(job_id: str) -> None:
             watermarked_path = await _apply_watermark(output_path)
             os.replace(watermarked_path, output_path)
 
-        # ── Audio Processing & Risk Analysis ──────────────────────────────
+        # ── Step 14: Audio Detection & Phase 3 Audio Processing ──────────────
         risk_level = RiskLevel.LOW
-        audio_mode = params.get("audio", {}).get("mode", "original") if isinstance(params.get("audio"), dict) else params.get("audio_mode", "original")
+        risk_details = {"audio_detected": False}
         
+        # Determine audio mode
+        audio_mode = params.get("audio_mode", "original")
+        if isinstance(params.get("audio"), dict):
+            audio_mode = params.get("audio").get("mode", audio_mode)
+
         if output_path and os.path.exists(output_path) and output_path.endswith(".mp4"):
-            if audio_mode == "mute":
-                output_path = await _mute_audio(output_path)
+            # Check source video for audio
+            try:
+                src_info = await probe_video(source_video_path)
+                has_audio = src_info.get("has_audio", False)
+                risk_details["audio_detected"] = has_audio
+            except Exception as e:
+                logger.warning(f"Could not probe source video for audio: {e}")
+                has_audio = True # Assume audio exists if probe fails for safety
+
+            if not has_audio:
                 risk_level = RiskLevel.LOW
-            elif audio_mode == "replace":
-                # Assuming library_track is provided or use a dummy
-                library_track = params.get("audio", {}).get("library_track") or params.get("library_track")
-                if library_track:
-                    output_path = await _replace_audio(output_path, library_track)
-                risk_level = RiskLevel.MEDIUM
+                risk_details["note"] = "No audio detected in source, safe for copyright."
             else:
-                # original audio kept
-                if job.job_type in (JobType.PATTERN_CUT, JobType.SOCIAL_EXPORT):
-                    risk_level = RiskLevel.HIGH
+                # Step 15 & 16: Audio Processing
+                if audio_mode == "mute":
+                    processed_audio_path = await _mute_audio(output_path)
+                    output_path = processed_audio_path
+                    risk_level = RiskLevel.LOW
+                elif audio_mode == "replace":
+                    library_track = params.get("library_track")
+                    if isinstance(params.get("audio"), dict):
+                        library_track = params.get("audio").get("library_track", library_track)
+                    
+                    if library_track:
+                        processed_audio_path = await _replace_audio(output_path, library_track)
+                        output_path = processed_audio_path
+                        risk_level = RiskLevel.MEDIUM
+                    else:
+                        # Fallback if no library track: mute it for safety
+                        logger.warning("Replace mode selected but no library_track provided. Muting instead.")
+                        output_path = await _mute_audio(output_path)
+                        risk_level = RiskLevel.LOW
                 else:
-                    risk_level = RiskLevel.MEDIUM  # smarter cuts are slightly safer
-        
+                    # original audio kept
+                    risk_level = RiskLevel.HIGH
+            
+            risk_details["audio_mode"] = audio_mode        
         # ── Collect output metadata ───────────────────────────────────────────
         output_filename = os.path.basename(output_path) if output_path else None
         output_size = (

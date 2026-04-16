@@ -32,13 +32,12 @@ def _thumbnail_url(video: Video, request_base: str = "") -> Optional[str]:
 
 def _to_upload_response(video: Video) -> VideoUploadResponse:
     return VideoUploadResponse(
-        id=video.id,
+        video_id=video.id,
         original_filename=video.original_filename,
         file_size_bytes=video.file_size_bytes,
-        duration_seconds=video.duration_seconds,
+        duration=video.duration_seconds,
         width=video.width,
         height=video.height,
-        fps=video.fps,
         has_audio=video.has_audio,
         thumbnail_url=_thumbnail_url(video),
         created_at=video.created_at,
@@ -91,13 +90,16 @@ async def upload_video(
 
     # ── FFprobe ───────────────────────────────────────────────────────────────
     try:
+        logger.debug(f"Probing video metadata: {file_path}")
         meta = await probe_video(file_path)
+        logger.debug(f"Metadata extracted successfully: {meta}")
     except Exception as exc:
-        os.remove(file_path)
-        logger.error(f"Metadata extraction failed: {exc}")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        logger.error(f"Metadata extraction failed for {file.filename}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Metadata Error: {str(exc)}"
+            detail=f"Metadata Extraction Error: {str(exc)}"
         )
 
     # ── Enforce free plan duration cap ────────────────────────────────────────
@@ -209,18 +211,20 @@ async def get_video(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
 
     return VideoDetail(
-        id=video.id,
+        video_id=video.id,
         original_filename=video.original_filename,
         title=video.title,
         description=video.description,
         file_size_bytes=video.file_size_bytes,
         mime_type=video.mime_type,
-        duration_seconds=video.duration_seconds,
+        duration=video.duration_seconds,
         width=video.width,
         height=video.height,
         fps=video.fps,
         has_audio=video.has_audio,
         thumbnail_url=_thumbnail_url(video),
+        type=video.type,
+        source_video_id=video.source_video_id,
         created_at=video.created_at,
     )
 

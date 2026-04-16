@@ -29,10 +29,17 @@ def _build_job_response(job: Job) -> JobResponse:
     download_url = None
     if job.status == JobStatus.COMPLETED and job.output_filename:
         download_url = f"/files/output/{job.output_filename}"
+    
+    # Map the risk details from the job model or defaults
+    risk_level = job.parameters.get("risk_level", "low")
+    risk_details = job.parameters.get("risk_details", {})
+
     return JobResponse(
         id=job.id,
+        job_id=job.id,
         job_type=job.job_type,
         status=job.status,
+        progress=job.progress_pct,
         progress_pct=job.progress_pct,
         parameters=job.parameters,
         error_message=job.error_message,
@@ -44,6 +51,8 @@ def _build_job_response(job: Job) -> JobResponse:
         started_at=job.started_at,
         completed_at=job.completed_at,
         download_url=download_url,
+        risk_level=risk_level,
+        risk_details=risk_details,
     )
 
 
@@ -103,9 +112,19 @@ async def create_job(
     await _check_quota(current_user, db)
     await _check_ai_access(current_user, body.job_type)
 
-    # 3. Handle Presets
+    # 3. Handle Settings & Presets
     final_params = body.parameters or {}
     job_type = body.job_type
+
+    # If settings are provided (Phase 3 UI), map them to parameters
+    if body.settings:
+        if body.settings.cut_pattern:
+            final_params["keep_seconds"] = body.settings.cut_pattern.keep
+            final_params["cut_seconds"] = body.settings.cut_pattern.remove
+        if body.settings.audio:
+            final_params["audio_mode"] = body.settings.audio.mode
+            if body.settings.audio.library_track:
+                final_params["library_track"] = body.settings.audio.library_track
 
     if body.preset_id:
         result = await db.execute(select(Preset).where(Preset.id == body.preset_id))
@@ -115,7 +134,7 @@ async def create_job(
         
         # Merge preset parameters (preset takes precedence for job_type, but user can override params)
         job_type = preset.job_type
-        # Default parameters from preset, then override with user parameters
+        # Default parameters from preset, then override with merged settings/parameters
         merged_params = preset.parameters.copy()
         merged_params.update(final_params)
         final_params = merged_params

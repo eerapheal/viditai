@@ -115,12 +115,17 @@ class JobResponse(BaseModel):
     @classmethod
     def map_aliases(cls, data: Any) -> Any:
         if isinstance(data, dict):
+            # Ensure aliases are populated if the originals are present
             if "id" in data and "job_id" not in data:
                 data["job_id"] = data["id"]
             if "progress_pct" in data and "progress" not in data:
                 data["progress"] = data["progress_pct"]
-        elif hasattr(data, "id"):
-            # This is roughly what Pydantic does with from_attributes=True
-            # but we can explicitly set these for easier access
-            pass
+            
+            # Map risk fields from nested parameters if they exist there
+            if "parameters" in data and isinstance(data["parameters"], dict):
+                params = data["parameters"]
+                if "risk_level" in params and "risk_level" not in data:
+                    data["risk_level"] = params["risk_level"]
+                if "risk_details" in params and "risk_details" not in data:
+                    data["risk_details"] = params["risk_details"]
         return data

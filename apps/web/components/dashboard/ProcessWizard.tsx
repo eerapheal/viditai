@@ -30,18 +30,24 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
     cut_seconds: 1.0,
   });
 
-  const handleStartProcess = async () => {
-    if (!selectedPresetId && step === 1) {
-        setStep(2); // Go to manual if nothing selected? Actually, let's force selection.
-        return;
-    }
+  // Phase 3 Audio Settings
+  const [audioSettings, setAudioSettings] = useState({
+    mode: "original",
+    library_track: "",
+  });
 
+  const handleStartProcess = async () => {
     setIsSubmitting(true);
     try {
+      // Phase 3 compliant createJob call
       const job = await createJob(
         video.id, 
-        selectedPresetId || undefined, 
-        selectedPresetId === "manual" ? customParams : undefined
+        selectedPresetId && selectedPresetId !== "manual" ? selectedPresetId : undefined, 
+        selectedPresetId === "manual" ? customParams : undefined,
+        {
+          audio: audioSettings,
+          cut_pattern: selectedPresetId === "manual" ? { keep: customParams.keep_seconds, remove: customParams.cut_seconds } : undefined
+        }
       );
       toast.success("Job started!");
       if (onComplete) onComplete(job);
@@ -132,18 +138,18 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
                 Back to projects
               </button>
               <AIButton 
-                onClick={selectedPresetId === "manual" ? () => setStep(2) : handleStartProcess}
+                onClick={() => setStep(selectedPresetId === "manual" ? 2 : 3)}
                 isLoading={isSubmitting}
                 disabled={!selectedPresetId}
               >
                 <div className="flex items-center gap-2">
-                  <span>{selectedPresetId === "manual" ? "Next Step" : "Start Processing"}</span>
-                  {selectedPresetId !== "manual" ? <Play size={16} fill="currentColor" /> : <ChevronRight size={18} />}
+                  <span>Next Step</span>
+                  <ChevronRight size={18} />
                 </div>
               </AIButton>
             </div>
           </motion.div>
-        ) : (
+        ) : step === 2 ? (
           <motion.div
             key="step2"
             initial={{ opacity: 0, x: 20 }}
@@ -217,13 +223,67 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
              </GlassCard>
 
              <div className="flex items-center justify-end pt-6 border-t border-slate-800">
+              <AIButton onClick={() => setStep(3)}>
+                <div className="flex items-center gap-2">
+                  <span>Next: Audio Settings</span>
+                  <ChevronRight size={18} />
+                </div>
+              </AIButton>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="step3"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+             <div className="flex items-center gap-4 mb-2">
+                <button 
+                  onClick={() => setStep(selectedPresetId === "manual" ? 2 : 1)} 
+                  className="p-2 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <h3 className="text-xl font-bold">Audio & Safety</h3>
+             </div>
+
+             <div className="grid grid-cols-1 gap-4">
+                {[
+                  { id: "original", title: "Keep Original", desc: "No changes to audio. High copyright risk.", icon: <Sparkles className="text-amber-400" /> },
+                  { id: "mute", title: "Mute All", desc: "Completely silent output. Lowest risk.", icon: <Settings2 className="text-slate-400" /> },
+                  { id: "replace", title: "Replace Audio", desc: "Swap with royalty-free music. Medium risk.", icon: <Zap className="text-blue-400" /> }
+                ].map((mode) => (
+                  <GlassCard
+                    key={mode.id}
+                    onClick={() => setAudioSettings(prev => ({ ...prev, mode: mode.id }))}
+                    className={cn(
+                      "p-4 cursor-pointer border-2 transition-all duration-300",
+                      audioSettings.mode === mode.id ? "border-blue-500 bg-blue-500/5 ring-4 ring-blue-500/10" : "border-slate-800 hover:border-slate-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center">
+                        {mode.icon}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-100">{mode.title}</h4>
+                        <p className="text-xs text-slate-400">{mode.desc}</p>
+                      </div>
+                    </div>
+                  </GlassCard>
+                ))}
+             </div>
+
+             <div className="flex items-center justify-end pt-6 border-t border-slate-800">
               <AIButton 
                 onClick={handleStartProcess}
                 isLoading={isSubmitting}
               >
                 <div className="flex items-center gap-2">
-                  <span>Create Custom Job</span>
-                  <Zap size={16} fill="currentColor" />
+                  <span>Start AutoCut</span>
+                  <Play size={16} fill="currentColor" />
                 </div>
               </AIButton>
             </div>

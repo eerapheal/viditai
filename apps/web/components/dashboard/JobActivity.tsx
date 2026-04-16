@@ -101,9 +101,27 @@ export function JobActivity({ videoId, onViewResult }: JobActivityProps) {
                     )}
 
                     {(job.status === "completed" || job.status === "failed") && (
-                       <p className="text-[11px] text-slate-500 mt-0.5">
-                         {job.status === "completed" ? "Successfully transformed video." : job.error_message}
-                       </p>
+                       <div className="mt-1 space-y-1">
+                          <p className="text-[11px] text-slate-500">
+                            {job.status === "completed" ? "Successfully transformed video." : job.error_message}
+                          </p>
+                          {job.status === "completed" && job.risk_level && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                               <span className={cn(
+                                 "w-1.5 h-1.5 rounded-full animate-pulse",
+                                 job.risk_level === "high" ? "bg-red-500" : 
+                                 job.risk_level === "medium" ? "bg-amber-500" : "bg-green-500"
+                               )} />
+                               <span className={cn(
+                                 "text-[9px] font-bold uppercase tracking-wider",
+                                 job.risk_level === "high" ? "text-red-400" : 
+                                 job.risk_level === "medium" ? "text-amber-400" : "text-green-400"
+                               )}>
+                                 {job.risk_level} Copyright Risk
+                               </span>
+                            </div>
+                          )}
+                       </div>
                     )}
                   </div>
                 </div>

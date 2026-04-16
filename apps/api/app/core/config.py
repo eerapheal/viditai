@@ -26,9 +26,12 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",      # Next.js web (dev)
+        "http://127.0.0.1:3000",      # Next.js web (dev)
         "http://localhost:8081",      # Expo web (dev)
+        "http://127.0.0.1:8081",      # Expo web (dev)
         "https://viditai.com",        # production web
         "exp://localhost:8081",       # Expo Go
+        "exp://127.0.0.1:8081",       # Expo Go
     ]
 
     # ── Processing ────────────────────────────────────────────────────────────

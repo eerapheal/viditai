@@ -5,9 +5,13 @@ export type JobStatus = "pending" | "processing" | "completed" | "failed" | "can
 
 export interface Job {
   id: string;
+  job_id: string; // for compatibility with Schema
   job_type: string;
   status: JobStatus;
+  progress: number;
   progress_pct: number;
+  risk_level: "low" | "medium" | "high";
+  risk_details: any;
   output_filename: string | null;
   download_url: string | null;
   error_message: string | null;
@@ -32,6 +36,7 @@ export function useJobs(videoId?: string) {
       });
       if (response.ok) {
         const data = await response.json();
+        // The API returns { items: [...] }
         setJobs(data.items);
       }
     } catch (error) {
@@ -41,7 +46,7 @@ export function useJobs(videoId?: string) {
     }
   }, [videoId]);
 
-  const createJob = async (videoId: string, presetId?: string, parameters?: any) => {
+  const createJob = async (videoId: string, presetId?: string, parameters?: any, settings?: any) => {
     const token = Cookies.get("auth_token");
     try {
       const response = await fetch("http://localhost:8000/api/v1/jobs/", {
@@ -53,8 +58,9 @@ export function useJobs(videoId?: string) {
         body: JSON.stringify({
           video_id: videoId,
           preset_id: presetId,
-          job_type: "pattern_cut", // Default for Phase 1
+          job_type: "pattern_cut", // Default
           parameters,
+          settings,
         }),
       });
 

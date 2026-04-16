@@ -11,62 +11,70 @@ from app.core.config import settings
 from app.core.logging_config import logger
 
 
+def _sync_run_subprocess(cmd: list[str], timeout: int) -> tuple[int, str]:
+    """Internal: Run a subprocess synchronously and return (code, output)."""
+    logger.debug(f"Subprocess starting: {' '.join(cmd)}")
+    try:
+        # We combine stdout and stderr for simplicity in logs/errors
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+            encoding="utf-8",
+            errors="replace"
+        )
+        logger.debug(f"Subprocess finished with exit code {result.returncode}")
+        return result.returncode, result.stdout
+    except subprocess.TimeoutExpired:
+        logger.error(f"Subprocess timed out after {timeout}s: {' '.join(cmd)}")
+        raise RuntimeError(f"Command timed out after {timeout}s: {' '.join(cmd)}")
+    except (FileNotFoundError, OSError) as e:
+        logger.error(f"Subprocess execution failed: {e}")
+        raise RuntimeError(f"Failed to execute '{cmd[0]}': {str(e)}")
+
+
 async def run_ffmpeg(*args: str, timeout: int = settings.JOB_TIMEOUT_SECONDS) -> str:
     """
-    Run an ffmpeg command asynchronously.
+    Run an ffmpeg command asynchronously using a thread pool.
     Returns combined stdout+stderr.
-    Raises RuntimeError on non-zero exit.
+    Raises RuntimeError on non-zero error code.
     """
     cmd = [settings.FFMPEG_PATH, "-y", *args]
     logger.debug(f"Executing: {' '.join(cmd)}")
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise RuntimeError(f"FFmpeg timed out after {timeout}s")
+    
+    # Run in a separate thread to avoid blocking the event loop
+    returncode, output = await asyncio.to_thread(_sync_run_subprocess, cmd, timeout)
 
-    output = (stdout + stderr).decode("utf-8", errors="replace")
-    if proc.returncode != 0:
-        raise RuntimeError(f"FFmpeg failed (exit {proc.returncode}):\n{output}")
+    if returncode != 0:
+        raise RuntimeError(f"FFmpeg failed (exit {returncode}):\n{output}")
     return output
 
 
 async def probe_video(file_path: str) -> dict:
     """
-    Run ffprobe on a file and return dict with:
-      duration, width, height, fps, has_audio
+    Run ffprobe on a file using a thread pool and return metadata dict.
     """
     cmd = [
-        settings.FFPROBE_PATH, "-v", "error",  # Changed quiet to error to see some output if needed
+        settings.FFPROBE_PATH, "-v", "error",
         "-print_format", "json",
         "-show_streams", "-show_format",
         file_path,
     ]
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-    except FileNotFoundError:
+    
+    # Run in a separate thread
+    returncode, output_str = await asyncio.to_thread(_sync_run_subprocess, cmd, 30)
+
+    if returncode != 0:
         raise RuntimeError(
-            f"ffprobe not found at '{settings.FFPROBE_PATH}'. "
-            "Please install FFmpeg and ensure ffprobe is in your PATH or configured in .env"
+            f"ffprobe failed with exit code {returncode}. "
+            f"Command: {' '.join(cmd)}. "
+            f"Error details: {output_str}"
         )
 
-    if proc.returncode != 0:
-        error_msg = stderr.decode().strip()
-        raise RuntimeError(f"ffprobe failed (exit {proc.returncode}): {error_msg}")
-
-    output_str = stdout.decode().strip()
     if not output_str:
-        raise RuntimeError("ffprobe returned empty output. The file might be corrupt or an invalid video format.")
+        raise RuntimeError("ffprobe returned empty output.")
 
     try:
         data = json.loads(output_str)
@@ -77,7 +85,7 @@ async def probe_video(file_path: str) -> dict:
     audio_stream = next((s for s in data.get("streams", []) if s["codec_type"] == "audio"), None)
 
     if not video_stream:
-        raise RuntimeError("No video stream found in file. It might be an audio-only file or corrupted.")
+        raise RuntimeError("No video stream found in file.")
 
     duration = float(data.get("format", {}).get("duration", 0) or 0)
     width = int(video_stream.get("width", 0)) if video_stream else 0

@@ -1,7 +1,11 @@
-"""
-AutoCut AI — FastAPI Backend
-Serves both the web (Next.js) and mobile (Expo/React Native) clients.
-"""
+import sys
+import asyncio
+
+# ── Windows Subprocess Fix ──────────────────────────────────────────────────
+# The default SelectorEventLoop on Windows does not support subprocesses.
+# We must use ProactorEventLoop for FFmpeg/FFprobe calls to work.
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,11 +53,41 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# ── Middleware (Order matters!) ───────────────────────────────────────────────
+import time
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-# Allow requests from the Next.js web app and from Expo (dev & production)
+class ProcessTimeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            # We must catch exceptions here too for the process time, 
+            # or rely on the global exception handler below.
+            raise exc
+        process_time = time.perf_counter() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+
+app.add_middleware(ProcessTimeMiddleware)
+
+# Global Exception Handler to avoid CORS masking on 500 errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled Exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
+
+# ── CORS (Added last so it's outermost for responses) ──────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -72,29 +106,7 @@ os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
 app.mount("/files/output", StaticFiles(directory=settings.OUTPUT_DIR), name="output")
 app.mount("/files/thumbnails", StaticFiles(directory=settings.THUMBNAIL_DIR), name="thumbnails")
 
-# ── Middleware ───────────────────────────────────────────────────────────────
-import time
-from fastapi import Request
-
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start_time = time.perf_counter()
-    response = await call_next(request)
-    process_time = time.perf_counter() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    
-    # Log requests in production
-    if not settings.DEBUG:
-        logger.info(
-            "Request",
-            extra={
-                "method": request.method,
-                "url": str(request.url),
-                "process_time": process_time,
-                "status_code": response.status_code
-            }
-        )
-    return response
+# Moved to middleware section
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(api_v1_router, prefix="/api/v1")
