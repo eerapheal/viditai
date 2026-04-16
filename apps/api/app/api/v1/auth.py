@@ -50,7 +50,9 @@ async def register(body: UserRegister, db: AsyncSession = Depends(get_db)):
         monthly_exports_used=0,
         exports_reset_at=datetime.now(timezone.utc),
     )
-    await db.flush()
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
 
     token = create_access_token(user.id, user.role.value)
     return TokenResponse(access_token=token, token_type="bearer", user=UserPublic.model_validate(user))
