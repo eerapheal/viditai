@@ -1,19 +1,20 @@
-import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, StyleProp, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
 interface GlassCardProps {
   children: React.ReactNode;
   className?: string;
+  style?: StyleProp<ViewStyle>;
   delay?: number;
 }
 
-export function GlassCard({ children, className, delay = 0 }: GlassCardProps) {
+export function GlassCard({ children, className, style, delay = 0 }: GlassCardProps) {
   return (
     <Animated.View 
       entering={FadeInUp.duration(500).delay(delay)}
       className={`relative overflow-hidden rounded-3xl border border-white/5 shadow-2xl ${className}`}
+      style={style}
     >
       <BlurView 
         intensity={Platform.OS === 'ios' ? 40 : 80} 

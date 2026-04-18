@@ -1,17 +1,13 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
-
-// Simple icon placeholders — replace with expo-vector-icons once installed
-function TabIcon({ label }: { label: string }) {
-  return null;
-}
+import { Home, LayoutDashboard, Library, User } from 'lucide-react-native';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#f59e0b',
+        tabBarActiveTintColor: '#3b82f6',
         tabBarInactiveTintColor: '#64748b',
         tabBarLabelStyle: styles.tabBarLabel,
         headerShown: false,
@@ -21,18 +17,28 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
+          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
         }}
       />
       <Tabs.Screen
-        name="news"
+        name="studio"
         options={{
-          title: 'News',
+          title: 'Studio',
+          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="vault"
+        options={{
+          title: 'Vault',
+          tabBarIcon: ({ color, size }) => <Library color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
+          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
         }}
       />
     </Tabs>
