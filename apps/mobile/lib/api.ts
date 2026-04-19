@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 // For development, we use the machine's local IP address.
 // On physical devices and emulators, 'localhost' points to the device itself.
-const DEV_API_URL = 'http://192.168.0.2:8000/api/v1';
+const DEV_API_URL = 'http://192.168.0.3:8000/api/v1';
 const PROD_API_URL = 'https://api.viditai.com/api/v1'; // Placeholder
 
 export const API_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;
@@ -100,6 +100,14 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     ...options,
     headers,
   });
+
+  if (response.status === 401) {
+    await deleteToken();
+    await deleteUser();
+    // Use a custom event or a simple reload to force state reset if needed, 
+    // but clearing storage will make the next app start or syncAuth fail.
+    throw new Error('Unauthorized');
+  }
 
   const data = await response.json();
 

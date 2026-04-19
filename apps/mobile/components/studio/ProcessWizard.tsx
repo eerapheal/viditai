@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Wand2, Zap, Scissors, Layout, ChevronRight, Check } from 'lucide-react-native';
+import { Wand2, Zap, Scissors, Layout, ChevronRight, Check, Minus, Plus, Music, VolumeX, Volume2 } from 'lucide-react-native';
 import { GlassCard } from '../ui/GlassCard';
 import { AIButton } from '../ui/AIButton';
 import { usePresets, Preset } from '../../lib/hooks/use-presets';
@@ -14,14 +14,32 @@ interface ProcessWizardProps {
 export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizardProps) {
   const { presets, fetchPresets, isLoading } = usePresets();
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
+  
+  // Custom Settings (Phase 2 & 3)
+  const [keepSeconds, setKeepSeconds] = useState(4);
+  const [cutSeconds, setCutSeconds] = useState(1);
+  const [audioMode, setAudioMode] = useState<'original' | 'mute' | 'replace'>('original');
 
   useEffect(() => {
     fetchPresets();
   }, []);
 
+  useEffect(() => {
+    if (selectedPreset) {
+      if (selectedPreset.parameters.keep_seconds) setKeepSeconds(selectedPreset.parameters.keep_seconds);
+      if (selectedPreset.parameters.cut_seconds) setCutSeconds(selectedPreset.parameters.cut_seconds);
+      if (selectedPreset.parameters.audio_mode) setAudioMode(selectedPreset.parameters.audio_mode);
+    }
+  }, [selectedPreset]);
+
   const handleStart = () => {
     if (selectedPreset) {
-      onProcess(selectedPreset.id, {});
+      onProcess(selectedPreset.id, {
+        settings: {
+          cut_pattern: { keep: keepSeconds, remove: cutSeconds },
+          audio: { mode: audioMode }
+        }
+      });
     }
   };
 
@@ -64,17 +82,85 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
       </ScrollView>
 
       {selectedPreset && (
-        <View style={styles.buttonContainer}>
-          <AIButton 
-            onPress={handleStart} 
-            isLoading={isProcessing}
-            disabled={isProcessing}
-          >
-            <View style={styles.buttonContent}>
-              <Text style={styles.buttonText}>Boost with AI</Text>
-              <ChevronRight color="#fff" size={20} />
+        <View style={styles.customSection}>
+          <View style={styles.divider} />
+          
+          {/* Pattern Controls (Phase 2) */}
+          {selectedPreset.job_type === 'pattern_cut' && (
+            <View style={styles.settingGroup}>
+              <Text style={styles.settingLabel}>RHYTHM PATTERN</Text>
+              <View style={styles.controlsRow}>
+                <View style={styles.controlItem}>
+                  <Text style={styles.controlLabel}>Keep (s)</Text>
+                  <View style={styles.numericInput}>
+                    <TouchableOpacity onPress={() => setKeepSeconds(Math.max(1, keepSeconds - 1))}>
+                      <Minus size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                    <Text style={styles.numericValue}>{keepSeconds}</Text>
+                    <TouchableOpacity onPress={() => setKeepSeconds(keepSeconds + 1)}>
+                      <Plus size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                <View style={styles.controlItem}>
+                  <Text style={styles.controlLabel}>Cut (s)</Text>
+                  <View style={styles.numericInput}>
+                    <TouchableOpacity onPress={() => setCutSeconds(Math.max(0.5, cutSeconds - 0.5))}>
+                      <Minus size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                    <Text style={styles.numericValue}>{cutSeconds}</Text>
+                    <TouchableOpacity onPress={() => setCutSeconds(cutSeconds + 0.5)}>
+                      <Plus size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
             </View>
-          </AIButton>
+          )}
+
+          {/* Audio Modes (Phase 3) */}
+          <View style={styles.settingGroup}>
+            <Text style={styles.settingLabel}>AUDIO EXPERIENCE</Text>
+            <View style={styles.audioModes}>
+              <TouchableOpacity 
+                style={[styles.audioChip, audioMode === 'original' && styles.selectedChip]}
+                onPress={() => setAudioMode('original')}
+              >
+                <Volume2 size={16} color={audioMode === 'original' ? '#fff' : '#64748b'} />
+                <Text style={[styles.chipText, audioMode === 'original' && styles.selectedChipText]}>Original</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.audioChip, audioMode === 'mute' && styles.selectedChip]}
+                onPress={() => setAudioMode('mute')}
+              >
+                <VolumeX size={16} color={audioMode === 'mute' ? '#fff' : '#64748b'} />
+                <Text style={[styles.chipText, audioMode === 'mute' && styles.selectedChipText]}>Mute</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.audioChip, audioMode === 'replace' && styles.selectedChip]}
+                onPress={() => setAudioMode('replace')}
+              >
+                <Music size={16} color={audioMode === 'replace' ? '#fff' : '#64748b'} />
+                <Text style={[styles.chipText, audioMode === 'replace' && styles.selectedChipText]}>Remix</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.buttonContainer}>
+            <AIButton 
+              onPress={handleStart} 
+              isLoading={isProcessing}
+              disabled={isProcessing}
+            >
+              <View style={styles.buttonContent}>
+                <Text style={styles.buttonText}>Boost with AI</Text>
+                <ChevronRight color="#fff" size={20} />
+              </View>
+            </AIButton>
+          </View>
         </View>
       )}
     </View>
@@ -101,6 +187,7 @@ const styles = StyleSheet.create({
   presetsList: {
     paddingRight: 20,
     gap: 16,
+    paddingBottom: 10,
   },
   presetCard: {
     width: 160,
@@ -144,8 +231,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  customSection: {
+    marginTop: 20,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#1e293b',
+    marginBottom: 24,
+  },
+  settingGroup: {
+    marginBottom: 24,
+  },
+  settingLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748b',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  controlItem: {
+    flex: 1,
+  },
+  controlLabel: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginBottom: 8,
+  },
+  numericInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  numericValue: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  audioModes: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  audioChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    paddingVertical: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  selectedChip: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: '#f59e0b',
+  },
+  chipText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectedChipText: {
+    color: '#f8fafc',
+  },
   buttonContainer: {
-    marginTop: 24,
+    marginTop: 10,
   },
   buttonContent: {
     flexDirection: 'row',

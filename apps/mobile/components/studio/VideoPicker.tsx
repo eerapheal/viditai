@@ -5,7 +5,7 @@ import { Upload, Video as VideoIcon, CheckCircle2 } from 'lucide-react-native';
 import { GlassCard } from '../ui/GlassCard';
 
 interface VideoPickerProps {
-  onVideoSelected: (uri: string, name: string, type: string) => void;
+  onVideoSelected: (uri: string, name: string, type: string, file?: any) => void;
   isUploading: boolean;
   uploadProgress: number;
 }
@@ -20,7 +20,7 @@ export function VideoPicker({ onVideoSelected, isUploading, uploadProgress }: Vi
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: ['videos'],
       allowsEditing: true,
       quality: 1,
     });
@@ -29,7 +29,7 @@ export function VideoPicker({ onVideoSelected, isUploading, uploadProgress }: Vi
       const asset = result.assets[0];
       const filename = asset.fileName || `video_${Date.now()}.mp4`;
       const type = asset.mimeType || 'video/mp4';
-      onVideoSelected(asset.uri, filename, type);
+      onVideoSelected(asset.uri, filename, type, (asset as any).file);
     }
   };
 

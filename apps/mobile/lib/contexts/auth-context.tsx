@@ -61,9 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    setUser(null);
     await deleteToken();
     await deleteUser();
-    setUser(null);
   };
 
   const refreshUser = async () => {

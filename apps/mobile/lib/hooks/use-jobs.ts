@@ -4,11 +4,17 @@ import { apiRequest } from '../api';
 export interface Job {
   job_id: string;
   job_type: string;
-  status: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   created_at: string;
   error_message?: string;
   download_url?: string;
+  risk_level?: 'low' | 'medium' | 'high';
+  risk_details?: {
+    audio_detected: boolean;
+    audio_mode: string;
+    note?: string;
+  };
 }
 
 export function useJobs() {

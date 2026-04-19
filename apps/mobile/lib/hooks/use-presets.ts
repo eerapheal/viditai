@@ -7,6 +7,7 @@ export interface Preset {
   description: string;
   job_type: string;
   icon?: string;
+  parameters: Record<string, any>;
 }
 
 export function usePresets() {

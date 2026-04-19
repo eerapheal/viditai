@@ -27,21 +27,26 @@ export function useVideos() {
     }
   }, []);
 
-  const uploadVideo = async (uri: string, filename: string, mimeType: string) => {
+  const uploadVideo = async (uri: string, filename: string, mimeType: string, file?: any) => {
     setIsLoading(true);
-    setUploadProgress(0.1); // Start indicator
+    setUploadProgress(0.1); 
 
     try {
       const formData = new FormData();
-      // @ts-ignore - React Native FormData.append expects an object for files
-      formData.append('file', {
-        uri,
-        name: filename,
-        type: mimeType,
-      });
+      
+      if (file) {
+        // Web: use the File/Blob object directly
+        formData.append('file', file, filename);
+      } else {
+        // Native: use the React Native file object
+        // @ts-ignore
+        formData.append('file', {
+          uri,
+          name: filename,
+          type: mimeType,
+        });
+      }
 
-      // Note: We don't use apiRequest here because it defaults to JSON
-      // We need to handle multipart manually or update apiRequest
       const response = await fetch(`${require('../api').API_URL}/videos/upload`, {
         method: 'POST',
         headers: {
@@ -52,12 +57,15 @@ export function useVideos() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Upload failed');
+      if (!response.ok) {
+        const errorDetail = typeof data.detail === 'object' ? JSON.stringify(data.detail) : (data.detail || 'Upload failed');
+        throw new Error(errorDetail);
+      }
       
       setUploadProgress(1);
       await fetchVideos();
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
       throw error;
     } finally {

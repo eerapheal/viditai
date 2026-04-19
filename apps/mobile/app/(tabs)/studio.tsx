@@ -26,9 +26,9 @@ export default function StudioScreen() {
     fetchJobs();
   }, []);
 
-  const handleVideoSelected = async (uri: string, filename: string, type: string) => {
+  const handleVideoSelected = async (uri: string, filename: string, type: string, file?: any) => {
     try {
-      const result = await uploadVideo(uri, filename, type);
+      const result = await uploadVideo(uri, filename, type, file);
       setLastUploadedVideoId(result.video_id);
     } catch (error: any) {
       Alert.alert('Upload Failed', error.message || 'Something went wrong');
@@ -117,12 +117,30 @@ function JobItem({ job }: { job: Job }) {
     }
   };
 
+  const getRiskColor = () => {
+    switch (job.risk_level) {
+      case 'high': return '#ef4444';
+      case 'medium': return '#f59e0b';
+      case 'low': return '#22c55e';
+      default: return '#64748b';
+    }
+  };
+
   return (
     <GlassCard style={styles.jobCard}>
       <View style={styles.jobInfo}>
         <View style={styles.jobMain}>
           <Text style={styles.jobType}>{job.job_type.replace(/_/g, ' ').toUpperCase()}</Text>
-          <Text style={styles.jobDate}>{new Date(job.created_at).toLocaleDateString()}</Text>
+          <View style={styles.jobMetaRow}>
+            <Text style={styles.jobDate}>{new Date(job.created_at).toLocaleDateString()}</Text>
+            {job.status === 'completed' && job.risk_level && (
+              <View style={[styles.riskBadge, { borderColor: getRiskColor() }]}>
+                <Text style={[styles.riskText, { color: getRiskColor() }]}>
+                  {job.risk_level.toUpperCase()} RISK
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
         
         <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor()}20` }]}>
@@ -135,12 +153,12 @@ function JobItem({ job }: { job: Job }) {
         </View>
       </View>
       
-      {job.status === 'processing' && (
+      {(job.status === 'processing' || job.status === 'pending') && (
         <View style={styles.progressRow}>
           <View style={styles.jobProgressBg}>
-            <View style={[styles.jobProgressFill, { width: `${job.progress}%` }]} />
+            <View style={[styles.jobProgressFill, { width: `${job.progress || 0}%` }]} />
           </View>
-          <Text style={styles.progressPct}>{job.progress}%</Text>
+          <Text style={styles.progressPct}>{job.progress || 0}%</Text>
         </View>
       )}
     </GlassCard>
@@ -277,5 +295,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#94a3b8',
     width: 35,
+  },
+  jobMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  riskBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  riskText: {
+    fontSize: 8,
+    fontWeight: '800',
   },
 });
