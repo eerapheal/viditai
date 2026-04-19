@@ -104,6 +104,27 @@ async def _run_job(job_id: str) -> None:
                 target_duration_pct=int(params.get("target_duration_pct", 30)),
                 progress_cb=progress_cb,
             )
+            
+            # Step 19: Chain Subtitles if requested
+            if params.get("add_captions") and output_path:
+                from app.services.subtitle_generation import generate_subtitles
+                logger.info(f"Chaining subtitles for AI Smart Cut output: {output_path}")
+                sub_result = await generate_subtitles(
+                    input_path=output_path,
+                    burn_into_video=True,
+                    progress_cb=progress_cb
+                )
+                output_path = sub_result["output_video_path"]
+
+        elif job.job_type == JobType.VOICEOVER_GENERATION:
+            from app.services.voiceover_generation import generate_voiceover
+            output_path = await generate_voiceover(
+                input_path=source_video_path,
+                text=params.get("text", ""),
+                language=params.get("language", "en"),
+                overlay=bool(params.get("overlay", False)),
+                progress_cb=progress_cb,
+            )
 
         elif job.job_type == JobType.SUBTITLE_GENERATION:
             from app.services.subtitle_generation import generate_subtitles

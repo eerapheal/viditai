@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Wand2, Zap, Scissors, Layout, ChevronRight, Check, Minus, Plus, Music, VolumeX, Volume2 } from 'lucide-react-native';
+import { Wand2, Zap, Scissors, Layout, ChevronRight, Check, Minus, Plus, Music, VolumeX, Volume2, Mic, Languages, Activity } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Switch } from 'react-native';
 import { GlassCard } from '../ui/GlassCard';
 import { AIButton } from '../ui/AIButton';
 import { usePresets, Preset } from '../../lib/hooks/use-presets';
@@ -20,6 +20,12 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
   const [cutSeconds, setCutSeconds] = useState(1);
   const [audioMode, setAudioMode] = useState<'original' | 'mute' | 'replace'>('original');
 
+  // AI Features (Phase 4)
+  const [addCaptions, setAddCaptions] = useState(false);
+  const [removeSilence, setRemoveSilence] = useState(true);
+  const [removeLowMotion, setRemoveLowMotion] = useState(true);
+  const [voiceoverText, setVoiceoverText] = useState('');
+
   useEffect(() => {
     fetchPresets();
   }, []);
@@ -29,16 +35,22 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
       if (selectedPreset.parameters.keep_seconds) setKeepSeconds(selectedPreset.parameters.keep_seconds);
       if (selectedPreset.parameters.cut_seconds) setCutSeconds(selectedPreset.parameters.cut_seconds);
       if (selectedPreset.parameters.audio_mode) setAudioMode(selectedPreset.parameters.audio_mode);
+      if (selectedPreset.parameters.add_captions) setAddCaptions(selectedPreset.parameters.add_captions);
+      if (selectedPreset.parameters.remove_silence) setRemoveSilence(selectedPreset.parameters.remove_silence);
+      if (selectedPreset.parameters.remove_low_motion) setRemoveLowMotion(selectedPreset.parameters.remove_low_motion);
     }
   }, [selectedPreset]);
 
   const handleStart = () => {
     if (selectedPreset) {
       onProcess(selectedPreset.id, {
-        settings: {
-          cut_pattern: { keep: keepSeconds, remove: cutSeconds },
-          audio: { mode: audioMode }
-        }
+        keep_seconds: keepSeconds,
+        cut_seconds: cutSeconds,
+        audio_mode: audioMode,
+        add_captions: addCaptions,
+        remove_silence: removeSilence,
+        remove_low_motion: removeLowMotion,
+        text: voiceoverText,
       });
     }
   };
@@ -66,6 +78,7 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
               <View style={styles.iconBox}>
                 {preset.job_type === 'pattern_cut' ? <Scissors color="#f59e0b" size={24} /> : 
                  preset.job_type === 'ai_smart_cut' ? <Zap color="#f59e0b" size={24} /> :
+                 preset.job_type === 'voiceover_generation' ? <Mic color="#f59e0b" size={24} /> :
                  <Wand2 color="#f59e0b" size={24} />}
               </View>
               <Text style={styles.presetName}>{preset.name}</Text>
@@ -116,6 +129,69 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
                   </View>
                 </View>
               </View>
+            </View>
+          )}
+
+          {/* AI Smart Trim Options (Phase 4) */}
+          {selectedPreset.job_type === 'ai_smart_cut' && (
+            <View style={styles.settingGroup}>
+              <Text style={styles.settingLabel}>SMART TRIMMING</Text>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabelGroup}>
+                  <Activity size={18} color="#94a3b8" />
+                  <Text style={styles.switchLabel}>Remove Silence</Text>
+                </View>
+                <Switch 
+                  value={removeSilence} 
+                  onValueChange={setRemoveSilence}
+                  trackColor={{ false: '#334155', true: '#f59e0b' }}
+                />
+              </View>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabelGroup}>
+                  <Zap size={18} color="#94a3b8" />
+                  <Text style={styles.switchLabel}>Low Motion Trim</Text>
+                </View>
+                <Switch 
+                  value={removeLowMotion} 
+                  onValueChange={setRemoveLowMotion}
+                  trackColor={{ false: '#334155', true: '#f59e0b' }}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* AI Subtitles Toggle (Phase 4) */}
+          {(selectedPreset.job_type === 'ai_smart_cut' || selectedPreset.job_type === 'subtitle_generation') && (
+            <View style={styles.settingGroup}>
+              <Text style={styles.settingLabel}>ACCESSIBILITY</Text>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabelGroup}>
+                  <Languages size={18} color="#94a3b8" />
+                  <Text style={styles.switchLabel}>AI Captions (Burned-in)</Text>
+                </View>
+                <Switch 
+                  value={addCaptions} 
+                  onValueChange={setAddCaptions}
+                  trackColor={{ false: '#334155', true: '#f59e0b' }}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* AI Voiceover Input (Phase 4) */}
+          {selectedPreset.job_type === 'voiceover_generation' && (
+            <View style={styles.settingGroup}>
+              <Text style={styles.settingLabel}>VOICEOVER SCRIPT</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="What should the AI say?"
+                placeholderTextColor="#475569"
+                multiline
+                numberOfLines={4}
+                value={voiceoverText}
+                onChangeText={setVoiceoverText}
+              />
             </View>
           )}
 
@@ -315,5 +391,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.03)',
+  },
+  switchLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  switchLabel: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  textInput: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    color: '#f8fafc',
+    padding: 16,
+    fontSize: 14,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
 });

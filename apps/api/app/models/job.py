@@ -12,6 +12,7 @@ class JobType(str, enum.Enum):
     SILENCE_REMOVAL = "silence_removal"
     AI_SMART_CUT = "ai_smart_cut"
     SUBTITLE_GENERATION = "subtitle_generation"
+    VOICEOVER_GENERATION = "voiceover_generation"
     SOCIAL_EXPORT = "social_export"
 
 
