@@ -43,7 +43,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
               </div>
            </AIButton>
            <a 
-            href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
+            href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
             download
             className={cn(
               "flex items-center gap-2 px-6 py-2.5 rounded-full font-bold transition-all text-white shadow-lg",
@@ -62,7 +62,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
         <div className="lg:col-span-2 space-y-6">
           <GlassCard className="p-0 overflow-hidden bg-black border-slate-800">
             <video 
-              src={job.download_url ? `${API_BASE}${job.download_url}` : undefined}
+              src={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : undefined}
               controls
               className="w-full aspect-video"
               autoPlay

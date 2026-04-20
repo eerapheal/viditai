@@ -142,7 +142,7 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                     <div className="relative aspect-video bg-black overflow-hidden">
                       {job.download_url ? (
                         <video
-                          src={`${API_BASE}${job.download_url}`}
+                          src={job.download_url?.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`}
                           className={cn(
                             "w-full h-full object-cover transition-all duration-500",
                             isHovered ? "scale-105 opacity-90" : "scale-100 opacity-60"
@@ -164,7 +164,7 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                         isHovered ? "opacity-100" : "opacity-0"
                       )}>
                         <a
-                          href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
+                          href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
                           download
                           className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur border border-white/20 text-xs font-bold hover:bg-white/20 transition-all"
                           onClick={(e) => !job.download_url && e.preventDefault()}
@@ -223,7 +223,7 @@ export function VaultView({ onViewResult }: VaultViewProps) {
 
                       <div className="flex gap-2">
                         <a
-                          href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
+                          href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
                           download
                           className={cn(
                             "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all",

@@ -168,19 +168,21 @@ async def list_videos(
     )
     videos = result.scalars().all()
 
-    items = [
-        VideoListItem(
-            id=v.id,
-            original_filename=v.original_filename,
-            title=v.title,
-            duration_seconds=v.duration_seconds,
-            width=v.width,
-            height=v.height,
-            thumbnail_url=_thumbnail_url(v),
-            created_at=v.created_at,
+    import asyncio
+    items = []
+    for v in videos:
+        items.append(
+            VideoListItem(
+                id=v.id,
+                original_filename=v.original_filename,
+                title=v.title,
+                duration_seconds=v.duration_seconds,
+                width=v.width,
+                height=v.height,
+                thumbnail_url=await _thumbnail_url(v),
+                created_at=v.created_at,
+            )
         )
-        for v in videos
-    ]
 
     return {
         "total": total,
@@ -217,7 +219,7 @@ async def get_video(
         height=video.height,
         fps=video.fps,
         has_audio=video.has_audio,
-        thumbnail_url=_thumbnail_url(video),
+        thumbnail_url=await _thumbnail_url(video),
         type=video.type,
         source_video_id=video.source_video_id,
         created_at=video.created_at,

@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     # ── Plans ─────────────────────────────────────────────────────────────────
     FREE_MONTHLY_EXPORTS: int = 5
     FREE_MAX_VIDEO_MINUTES: int = 10
+    
+    # ── Payments ──────────────────────────────────────────────────────────────
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRO_PRICE_ID: str = "" # e.g., price_123...
+
+    PAYSTACK_SECRET_KEY: str = ""
+    PAYSTACK_PRO_PLAN_CODE: str = "" # e.g., PL_123...
+    PAYSTACK_CALLBACK_URL: str = "http://localhost:3000/dashboard/user/upgrade/success"
 
     class Config:
         env_file = ".env"

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
+import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library } from "lucide-react";
 import { useVideos, VideoMetadata } from "@/lib/hooks/use-videos";
@@ -123,7 +124,9 @@ export default function UserDashboard() {
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-sm text-slate-400 uppercase tracking-widest">Plan: {user?.plan}</h3>
                     {user?.plan === "free" && (
-                       <span className="text-[10px] text-blue-400 font-bold border border-blue-400/30 px-1.5 py-0.5 rounded">UPGRADE</span>
+                       <Link href="/dashboard/user/upgrade">
+                        <span className="text-[10px] text-blue-400 font-bold border border-blue-400/30 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-400/10 transition-colors">UPGRADE</span>
+                       </Link>
                     )}
                   </div>
                   <p className="text-2xl font-bold mt-1 text-glow">{totalExports} / {exportLimit === 9999 ? '∞' : exportLimit} Exports</p>
@@ -140,7 +143,10 @@ export default function UserDashboard() {
                             animate={{ width: `${quotaPercentage}%` }}
                           />
                        </div>
-                       <p className="text-[10px] text-slate-500">Monthly resets in 12 days</p>
+                       <div className="flex justify-between items-center">
+                          <p className="text-[10px] text-slate-500">Monthly resets in 12 days</p>
+                          <Link href="/dashboard/user/upgrade" className="text-[10px] text-blue-400 hover:underline">Get more credits</Link>
+                       </div>
                     </div>
                   )}
                 </div>
