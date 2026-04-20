@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Lock, ShieldCheck } from "lucide-react";
+import { API_V1 } from "@/lib/config";
 import { toast } from "sonner";
 
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -47,7 +48,7 @@ function ResetPasswordForm() {
   const onSubmit = async (data: ResetFormValues) => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/v1/auth/password-reset-confirm", {
+      const response = await fetch(`${API_V1}/auth/password-reset-confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

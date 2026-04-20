@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Video, Star, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft } from "lucide-react";
+import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library } from "lucide-react";
 import { useVideos, VideoMetadata } from "@/lib/hooks/use-videos";
 import { useJobs, Job } from "@/lib/hooks/use-jobs";
 import { VideoUpload } from "@/components/dashboard/VideoUpload";
@@ -11,10 +11,12 @@ import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { ProcessWizard } from "@/components/dashboard/ProcessWizard";
 import { JobActivity } from "@/components/dashboard/JobActivity";
 import { VideoResultView } from "@/components/dashboard/VideoResultView";
+import { VaultView } from "@/components/dashboard/VaultView";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/config";
 
-type ViewState = "overview" | "upload" | "process" | "result";
+type ViewState = "overview" | "upload" | "process" | "result" | "vault";
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -26,7 +28,23 @@ export default function UserDashboard() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   const activeJobsCount = jobs.filter(j => j.status === "processing").length;
+  
+  // Quota calculation
   const totalExports = user?.monthly_exports_used || 0;
+  const exportLimit = user?.plan === "free" ? 10 : 9999; // Replace with dynamic if available
+  const quotaPercentage = Math.min(100, (totalExports / exportLimit) * 100);
+
+  // Periodically refresh user to update quota after jobs finish
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const hasActive = jobs.some(j => j.status === "processing");
+      if (hasActive) {
+        const { refreshUser } = require("@/lib/contexts/auth-context").useAuth(); // Dynamic access to avoid circular or context issues
+        refreshUser();
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [jobs]);
 
   const handleVideoSelect = (video: VideoMetadata) => {
     setSelectedVideo(video);
@@ -49,21 +67,30 @@ export default function UserDashboard() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-8"
           >
-            {/* Header */}
+                {/* Header */}
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-3xl font-bold font-glow">Welcome, {user?.full_name?.split(" ")[0] || "Creator"}</h2>
                 <p className="text-slate-400 mt-1">Transform your footage into viral hits.</p>
               </div>
               
-              <button 
-                onClick={() => setViewState("upload")}
-                className="flex items-center gap-2 px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-500 font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 group overflow-hidden relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                <Plus size={18} />
-                <span>Upload New Video</span>
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setViewState("vault")}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-900 border border-slate-700 hover:border-amber-500/50 hover:text-amber-400 font-bold transition-all text-sm"
+                >
+                  <Library size={16} />
+                  <span>My Vault</span>
+                </button>
+                <button 
+                  onClick={() => setViewState("upload")}
+                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-500 font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 group overflow-hidden relative"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                  <Plus size={18} />
+                  <span>Upload New Video</span>
+                </button>
+              </div>
             </div>
 
             {/* Stats */}
@@ -93,8 +120,29 @@ export default function UserDashboard() {
                   <Clock className="text-green-400" size={24} />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm text-slate-400 uppercase tracking-widest">Usage</h3>
-                  <p className="text-3xl font-bold mt-1 text-glow">{totalExports} Exports</p>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm text-slate-400 uppercase tracking-widest">Plan: {user?.plan}</h3>
+                    {user?.plan === "free" && (
+                       <span className="text-[10px] text-blue-400 font-bold border border-blue-400/30 px-1.5 py-0.5 rounded">UPGRADE</span>
+                    )}
+                  </div>
+                  <p className="text-2xl font-bold mt-1 text-glow">{totalExports} / {exportLimit === 9999 ? '∞' : exportLimit} Exports</p>
+                  
+                  {user?.plan === "free" && (
+                    <div className="mt-4 space-y-2">
+                       <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
+                          <motion.div 
+                            className={cn(
+                              "h-full rounded-full",
+                              quotaPercentage > 90 ? "bg-red-500" : "bg-green-500"
+                            )}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${quotaPercentage}%` }}
+                          />
+                       </div>
+                       <p className="text-[10px] text-slate-500">Monthly resets in 12 days</p>
+                    </div>
+                  )}
                 </div>
               </GlassCard>
             </div>
@@ -189,7 +237,7 @@ export default function UserDashboard() {
                         <div className="aspect-[9/16] relative bg-black">
                              {selectedVideo.thumbnail_url ? (
                                 <img 
-                                    src={`http://localhost:8000${selectedVideo.thumbnail_url}`} 
+                                    src={`${API_BASE}${selectedVideo.thumbnail_url}`} 
                                     className="w-full h-full object-cover opacity-60"
                                     alt="Preview"
                                 />
@@ -223,6 +271,26 @@ export default function UserDashboard() {
                 setViewState("overview");
               }} 
             />
+          </motion.div>
+        )}
+
+        {viewState === "vault" && (
+          <motion.div
+            key="vault"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setViewState("overview")}
+                className="p-2 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            </div>
+            <VaultView onViewResult={(job) => { setSelectedJob(job); setViewState("result"); }} />
           </motion.div>
         )}
       </AnimatePresence>

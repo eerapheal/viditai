@@ -8,6 +8,10 @@ import { StatusBar } from 'expo-status-bar';
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
 
+  const totalExports = user?.monthly_exports_used || 0;
+  const exportLimit = user?.plan === 'free' ? 10 : 9999;
+  const quotaPercentage = Math.min(100, (totalExports / exportLimit) * 100);
+
   const handleLogout = () => {
     Alert.alert(
       "Sign Out",
@@ -35,8 +39,35 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{user?.full_name || 'Vidit User'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           
-          <View style={styles.planBadge}>
-            <Text style={styles.planText}>PRO PLAN</Text>
+          <View style={[styles.planBadge, { borderColor: user?.plan === 'free' ? 'rgba(245,158,11,0.3)' : '#3b82f6' }]}>
+            <Text style={[styles.planText, { color: user?.plan === 'free' ? '#f59e0b' : '#3b82f6' }]}>
+              {user?.plan?.toUpperCase() || 'FREE'} PLAN
+            </Text>
+          </View>
+
+          <View style={styles.quotaContainer}>
+            <View style={styles.quotaHeader}>
+              <Text style={styles.quotaTitle}>Monthly Usage</Text>
+              <Text style={styles.quotaStats}>
+                {totalExports} / {exportLimit === 9999 ? '∞' : exportLimit}
+              </Text>
+            </View>
+            <View style={styles.progressBarBg}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { 
+                    width: `${quotaPercentage}%`,
+                    backgroundColor: quotaPercentage > 80 ? '#ef4444' : '#22c55e'
+                  }
+                ]} 
+              />
+            </View>
+            {user?.plan === 'free' && (
+              <TouchableOpacity style={styles.upgradeLink}>
+                <Text style={styles.upgradeText}>Upgrade to Pro for unlimited exports</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -146,6 +177,48 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#f59e0b',
     letterSpacing: 1.5,
+  },
+  quotaContainer: {
+    width: '100%',
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  quotaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  quotaTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  quotaStats: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#f8fafc',
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  upgradeLink: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  upgradeText: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '700',
   },
   menuContainer: {
     gap: 8,

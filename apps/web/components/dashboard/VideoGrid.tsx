@@ -6,6 +6,7 @@ import { Play, Clock, Trash2, Video as VideoIcon } from "lucide-react";
 import { VideoMetadata } from "@/lib/hooks/use-videos";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/config";
 
 interface VideoGridProps {
   videos: VideoMetadata[];
@@ -61,7 +62,7 @@ export function VideoGrid({ videos, onSelect, onDelete, selectedId }: VideoGridP
             <div className="aspect-video relative overflow-hidden bg-slate-900 group/thumb">
               {video.thumbnail_url ? (
                 <img
-                  src={`http://localhost:8000${video.thumbnail_url}`}
+                  src={`${API_BASE}${video.thumbnail_url}`}
                   alt={video.original_filename}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover/thumb:scale-110"
                 />

@@ -16,12 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
-from app.models.job import Job, JobType, JobStatus, RiskLevel
-from app.models.user import Plan
-from app.services.ffmpeg import run_ffmpeg, probe_video
+from app.services.storage import storage_service
 from app.core.config import settings
 from app.core.logging_config import logger
-
+import tempfile
+import shutil
 
 async def _update_job(job_id: str, **fields) -> None:
     """Helper: open a fresh DB session and update job fields."""
@@ -37,7 +36,6 @@ async def _update_job(job_id: str, **fields) -> None:
 
 async def _run_job(job_id: str) -> None:
     """Core execution: dispatch to the correct service."""
-    # ── Load job + related video eagerly ─────────────────────────────────────
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Job)
@@ -47,15 +45,8 @@ async def _run_job(job_id: str) -> None:
         job = result.scalar_one_or_none()
 
     if not job:
-        logger.warning(f"Job {job_id} not found in worker")
         return
-    if job.status == JobStatus.CANCELLED:
-        logger.info(f"Job {job_id} skipped (already cancelled)")
-        return
-
-    logger.info(f"Worker processing job {job_id} ({job.job_type})")
-    source_video_path: str = job.source_video.file_path
-
+    
     # ── Mark as processing ────────────────────────────────────────────────────
     await _update_job(
         job_id,
@@ -64,7 +55,13 @@ async def _run_job(job_id: str) -> None:
         progress_pct=0,
     )
 
-    # ── Progress callback ─────────────────────────────────────────────────────
+    # ── 1. Fetch Source Asset to Local Sandbox ──────────────────────────────
+    source_key = job.source_video.file_path
+    local_source_path = await storage_service.get_file_path(source_key)
+    
+    # Track files to cleanup
+    temp_files = [local_source_path]
+
     async def progress_cb(pct: int) -> None:
         await _update_job(job_id, progress_pct=pct)
 
@@ -72,13 +69,13 @@ async def _run_job(job_id: str) -> None:
     output_path: Optional[str] = None
 
     try:
-        # ── Route to correct service ──────────────────────────────────────────
-
+        from app.models.job import JobType
+        
+        # ── 2. Route to correct service ───────────────────────────────────────
         if job.job_type == JobType.PATTERN_CUT:
             from app.services.pattern_cut import apply_pattern_cut
-            logger.info(f"Applying pattern cut: {source_video_path} (keep: {params.get('keep_seconds')}s, cut: {params.get('cut_seconds')}s)")
             output_path = await apply_pattern_cut(
-                input_path=source_video_path,
+                input_path=local_source_path,
                 keep_seconds=float(params.get("keep_seconds", 4)),
                 cut_seconds=float(params.get("cut_seconds", 1)),
                 progress_cb=progress_cb,
@@ -87,7 +84,7 @@ async def _run_job(job_id: str) -> None:
         elif job.job_type == JobType.SILENCE_REMOVAL:
             from app.services.silence_removal import apply_silence_removal
             output_path = await apply_silence_removal(
-                input_path=source_video_path,
+                input_path=local_source_path,
                 silence_threshold_db=float(params.get("silence_threshold_db", -40)),
                 min_silence_duration=float(params.get("min_silence_duration", 0.5)),
                 padding_seconds=float(params.get("padding_seconds", 0.1)),
@@ -97,29 +94,22 @@ async def _run_job(job_id: str) -> None:
         elif job.job_type == JobType.AI_SMART_CUT:
             from app.services.ai_smart_cut import apply_ai_smart_cut
             output_path = await apply_ai_smart_cut(
-                input_path=source_video_path,
+                input_path=local_source_path,
                 remove_silence=bool(params.get("remove_silence", True)),
                 remove_low_motion=bool(params.get("remove_low_motion", True)),
                 remove_filler_words=bool(params.get("remove_filler_words", False)),
                 target_duration_pct=int(params.get("target_duration_pct", 30)),
                 progress_cb=progress_cb,
             )
-            
-            # Step 19: Chain Subtitles if requested
             if params.get("add_captions") and output_path:
                 from app.services.subtitle_generation import generate_subtitles
-                logger.info(f"Chaining subtitles for AI Smart Cut output: {output_path}")
-                sub_result = await generate_subtitles(
-                    input_path=output_path,
-                    burn_into_video=True,
-                    progress_cb=progress_cb
-                )
+                sub_result = await generate_subtitles(input_path=output_path, burn_into_video=True, progress_cb=progress_cb)
                 output_path = sub_result["output_video_path"]
 
         elif job.job_type == JobType.VOICEOVER_GENERATION:
             from app.services.voiceover_generation import generate_voiceover
             output_path = await generate_voiceover(
-                input_path=source_video_path,
+                input_path=local_source_path,
                 text=params.get("text", ""),
                 language=params.get("language", "en"),
                 overlay=bool(params.get("overlay", False)),
@@ -129,134 +119,85 @@ async def _run_job(job_id: str) -> None:
         elif job.job_type == JobType.SUBTITLE_GENERATION:
             from app.services.subtitle_generation import generate_subtitles
             sub_result = await generate_subtitles(
-                input_path=source_video_path,
-                language=params.get("language"),
-                model_size=params.get("model_size", "base"),
+                input_path=local_source_path,
                 burn_into_video=bool(params.get("burn_into_video", False)),
                 progress_cb=progress_cb,
             )
-            # Primary output: burned video if requested, else the SRT file
             output_path = sub_result.get("output_video_path") or sub_result["srt_path"]
 
-        elif job.job_type == JobType.SOCIAL_EXPORT:
-            from app.services.social_export import apply_social_export
-            from app.models.job import ExportFormat
-            fmt = ExportFormat(params.get("format", "tiktok"))
-            output_path = await apply_social_export(
-                input_path=source_video_path,
-                export_format=fmt,
-                add_captions=bool(params.get("add_captions", False)),
-                face_zoom=bool(params.get("face_zoom", False)),
-                add_watermark_text=params.get("add_watermark_text"),
-                progress_cb=progress_cb,
-            )
+        if output_path:
+            temp_files.append(output_path)
 
-        else:
-            raise ValueError(f"Unknown job type: {job.job_type}")
-
-        # ── Add watermark for free users ──────────────────────────────────────
-        if (
-            job.has_watermark
-            and output_path
-            and os.path.exists(output_path)
-            and output_path.endswith(".mp4")
-        ):
+        # ── 3. Add Watermark if Free Plan ────────────────────────────────────
+        from app.models.job import JobStatus
+        if job.has_watermark and output_path and output_path.endswith(".mp4"):
             watermarked_path = await _apply_watermark(output_path)
-            os.replace(watermarked_path, output_path)
+            temp_files.append(watermarked_path)
+            output_path = watermarked_path
 
-        # ── Step 14: Audio Detection & Phase 3 Audio Processing ──────────────
+        # ── 4. Audio Safety Check ───────────────────────────────────────────
+        from app.models.job import RiskLevel
+        from app.services.ffmpeg import probe_video
         risk_level = RiskLevel.LOW
-        risk_details = {"audio_detected": False}
-        
-        # Determine audio mode
         audio_mode = params.get("audio_mode", "original")
-        if isinstance(params.get("audio"), dict):
-            audio_mode = params.get("audio").get("mode", audio_mode)
 
-        if output_path and os.path.exists(output_path) and output_path.endswith(".mp4"):
-            # Check source video for audio
-            try:
-                src_info = await probe_video(source_video_path)
-                has_audio = src_info.get("has_audio", False)
-                risk_details["audio_detected"] = has_audio
-            except Exception as e:
-                logger.warning(f"Could not probe source video for audio: {e}")
-                has_audio = True # Assume audio exists if probe fails for safety
-
-            if not has_audio:
-                risk_level = RiskLevel.LOW
-                risk_details["note"] = "No audio detected in source, safe for copyright."
-            else:
-                # Step 15 & 16: Audio Processing
+        if output_path and output_path.endswith(".mp4"):
+            src_info = await probe_video(local_source_path)
+            if src_info.get("has_audio"):
                 if audio_mode == "mute":
-                    processed_audio_path = await _mute_audio(output_path)
-                    output_path = processed_audio_path
+                    output_path = await _mute_audio(output_path)
                     risk_level = RiskLevel.LOW
                 elif audio_mode == "replace":
-                    library_track = params.get("library_track")
-                    if isinstance(params.get("audio"), dict):
-                        library_track = params.get("audio").get("library_track", library_track)
-                    
-                    if library_track:
-                        processed_audio_path = await _replace_audio(output_path, library_track)
-                        output_path = processed_audio_path
+                    lib_track = params.get("library_track")
+                    if lib_track:
+                        output_path = await _replace_audio(output_path, lib_track)
                         risk_level = RiskLevel.MEDIUM
                     else:
-                        # Fallback if no library track: mute it for safety
-                        logger.warning("Replace mode selected but no library_track provided. Muting instead.")
                         output_path = await _mute_audio(output_path)
                         risk_level = RiskLevel.LOW
                 else:
-                    # original audio kept
                     risk_level = RiskLevel.HIGH
-            
-            risk_details["audio_mode"] = audio_mode        
-        # ── Collect output metadata ───────────────────────────────────────────
-        output_filename = os.path.basename(output_path) if output_path else None
-        output_size = (
-            os.path.getsize(output_path)
-            if output_path and os.path.exists(output_path)
-            else None
-        )
-        output_duration: Optional[float] = None
 
-        if output_path and os.path.exists(output_path) and output_path.endswith(".mp4"):
-            try:
-                from app.services.ffmpeg import probe_video
-                out_info = await probe_video(output_path)
-                output_duration = out_info.get("duration_seconds")
-            except Exception:
-                pass
+        # ── 5. Ship Result to Cloud Storage ───────────────────────────────────
+        storage_output_key = f"output/{os.path.basename(output_path)}"
+        with open(output_path, "rb") as f:
+            await storage_service.upload_file(f, storage_output_key)
 
+        # Final Metadata
+        out_info = await probe_video(output_path) if output_path.endswith(".mp4") else {}
+        
         await _update_job(
             job_id,
             status=JobStatus.COMPLETED,
             progress_pct=100,
             completed_at=datetime.now(timezone.utc),
-            output_file_path=output_path,
-            output_filename=output_filename,
-            output_size_bytes=output_size,
-            output_duration_seconds=output_duration,
+            output_file_path=storage_output_key,
+            output_filename=os.path.basename(output_path),
+            output_size_bytes=os.path.getsize(output_path),
+            output_duration_seconds=out_info.get("duration_seconds"),
             risk_level=risk_level,
             risk_details={"audio_mode": audio_mode, "transformation": job.job_type.value}
         )
-        logger.info(f"Job {job_id} completed successfully")
-
-    except asyncio.CancelledError:
-        await _update_job(
-            job_id,
-            status=JobStatus.CANCELLED,
-            completed_at=datetime.now(timezone.utc),
-        )
 
     except Exception as exc:
+        logger.error(f"Worker Error: {exc}", exc_info=True)
         await _update_job(
             job_id,
             status=JobStatus.FAILED,
-            progress_pct=0,
             completed_at=datetime.now(timezone.utc),
             error_message=str(exc)[:1024],
         )
+    finally:
+        # ── 6. Cleanup Sandbox ──────────────────────────────────────────────
+        for f in temp_files:
+            if f and os.path.exists(f):
+                try:
+                    if os.path.isdir(f):
+                        shutil.rmtree(f)
+                    else:
+                        os.remove(f)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp file {f}: {e}")
 
 
 async def _apply_watermark(input_path: str) -> str:

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import Cookies from "js-cookie";
+import { API_V1 } from "@/lib/config";
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
@@ -25,7 +26,7 @@ export function useJobs(videoId?: string) {
   const fetchJobs = useCallback(async () => {
     setIsLoading(true);
     const token = Cookies.get("auth_token");
-    let url = "http://localhost:8000/api/v1/jobs/";
+    let url = `${API_V1}/jobs/`;
     if (videoId) {
       url += `?video_id=${videoId}`;
     }
@@ -34,6 +35,11 @@ export function useJobs(videoId?: string) {
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.status === 401) {
+        Cookies.remove("auth_token");
+        window.location.href = "/login";
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         // The API returns { items: [...] }
@@ -49,7 +55,7 @@ export function useJobs(videoId?: string) {
   const createJob = async (videoId: string, jobType: string = "pattern_cut", parameters: any = {}, presetId?: string) => {
     const token = Cookies.get("auth_token");
     try {
-      const response = await fetch("http://localhost:8000/api/v1/jobs/", {
+      const response = await fetch(`${API_V1}/jobs/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

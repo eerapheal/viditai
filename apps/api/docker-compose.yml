@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: vidit-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: always
+
+  worker:
+    build: .
+    container_name: vidit-worker
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+    # The worker in this setup runs within the same process context if using BackgroundTasks,
+    # but this service is ready if we swap to a dedicated worker like Celery.
+    # For now, it serves as a placeholder for scaling or dedicated processing nodes.
+    command: python -m app.worker_dedicated # Placeholder if we move to a standalone worker
+    restart: always
+    profiles:
+      - "dedicated-worker"
+
+networks:
+  default:
+    name: vidit-network

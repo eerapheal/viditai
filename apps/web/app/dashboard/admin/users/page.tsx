@@ -5,6 +5,7 @@ import { useAuth, User, UserRole } from "@/lib/contexts/auth-context";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Shield, ShieldAlert, User as UserIcon, Check, Loader2, Trash2, UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { API_V1 } from "@/lib/config";
 import Cookies from "js-cookie";
 
 export default function UserManagementPage() {
@@ -17,7 +18,7 @@ export default function UserManagementPage() {
     setIsLoading(true);
     const token = Cookies.get("auth_token");
     try {
-      const response = await fetch("http://localhost:8000/api/v1/admin/users", {
+      const response = await fetch(`${API_V1}/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -46,7 +47,7 @@ export default function UserManagementPage() {
     const endpoint = currentStatus ? "suspend" : "activate";
     
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/admin/users/${userId}/${endpoint}`, {
+      const response = await fetch(`${API_V1}/admin/users/${userId}/${endpoint}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -79,7 +80,7 @@ export default function UserManagementPage() {
     const token = Cookies.get("auth_token");
     
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/admin/users/${userId}`, {
+      const response = await fetch(`${API_V1}/admin/users/${userId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -106,7 +107,7 @@ export default function UserManagementPage() {
     setUpdatingId(userId);
     const token = Cookies.get("auth_token");
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/admin/users/${userId}/role`, {
+      const response = await fetch(`${API_V1}/admin/users/${userId}/role`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

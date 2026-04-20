@@ -16,21 +16,21 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.video import Video
 from app.schemas.video import VideoUploadResponse, VideoListItem, VideoDetail
-from app.services.ffmpeg import probe_video, generate_thumbnail
+from app.services.storage import storage_service
 from app.core.logging_config import logger
 from app.core.limiter import limiter
+import tempfile
 
 router = APIRouter()
 
 
-def _thumbnail_url(video: Video, request_base: str = "") -> Optional[str]:
+async def _thumbnail_url(video: Video) -> Optional[str]:
     if not video.thumbnail_path:
         return None
-    filename = os.path.basename(video.thumbnail_path)
-    return f"/files/thumbnails/{filename}"
+    return await storage_service.get_download_url(video.thumbnail_path)
 
 
-def _to_upload_response(video: Video) -> VideoUploadResponse:
+def _to_upload_response(video: Video, thumb_url: Optional[str] = None) -> VideoUploadResponse:
     return VideoUploadResponse(
         video_id=video.id,
         original_filename=video.original_filename,
@@ -39,7 +39,7 @@ def _to_upload_response(video: Video) -> VideoUploadResponse:
         width=video.width,
         height=video.height,
         has_audio=video.has_audio,
-        thumbnail_url=_thumbnail_url(video),
+        thumbnail_url=thumb_url,
         created_at=video.created_at,
     )
 
@@ -58,95 +58,90 @@ async def upload_video(
     Upload a raw video file. Triggers auto-probe (duration, fps, resolution).
     """
     logger.info(f"Starting upload: {file.filename} (user: {current_user.id})")
-    # ── Validate MIME type ────────────────────────────────────────────────────
+    
     if file.content_type not in settings.ALLOWED_VIDEO_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported video type: {file.content_type}. "
-                   f"Allowed: {settings.ALLOWED_VIDEO_TYPES}",
+            detail=f"Unsupported video type: {file.content_type}.",
         )
 
-    # ── Check free-plan video length limit (enforced post-probe) ─────────────
     safe_ext = (file.filename or "video.mp4").rsplit(".", 1)[-1].lower()
     stored_name = f"{uuid.uuid4().hex}.{safe_ext}"
-    file_path = os.path.join(settings.UPLOAD_DIR, stored_name)
-
-    # ── Stream to disk ────────────────────────────────────────────────────────
-    size = 0
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-
-    with open(file_path, "wb") as out:
-        while chunk := await file.read(1024 * 1024):  # 1 MB chunks
+    
+    # ── 1. Stream to Temporary File for Processing ───────────────────────────
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{safe_ext}") as tmp:
+        size = 0
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        while chunk := await file.read(1024 * 1024):
             size += len(chunk)
             if size > max_bytes:
-                out.close()
-                os.remove(file_path)
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"File exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB} MB.",
-                )
-            out.write(chunk)
+                tmp.close()
+                os.remove(tmp.name)
+                raise HTTPException(status_code=413, detail="File too large.")
+            tmp.write(chunk)
+        tmp_path = tmp.name
 
-    # ── FFprobe ───────────────────────────────────────────────────────────────
     try:
-        logger.debug(f"Probing video metadata: {file_path}")
-        meta = await probe_video(file_path)
-        logger.debug(f"Metadata extracted successfully: {meta}")
-    except Exception as exc:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        logger.error(f"Metadata extraction failed for {file.filename}: {exc}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Metadata Extraction Error: {str(exc)}"
-        )
+        from app.services.ffmpeg import probe_video, generate_thumbnail
+        
+        # ── 2. Probe ──────────────────────────────────────────────────────────
+        meta = await probe_video(tmp_path)
+        
+        # Enforce free plan limits
+        from app.models.user import Plan
+        if current_user.plan == Plan.FREE and meta["duration_seconds"] > (settings.FREE_MAX_VIDEO_MINUTES * 60):
+            os.remove(tmp_path)
+            raise HTTPException(status_code=403, detail="Free plan duration limit exceeded.")
 
-    # ── Enforce free plan duration cap ────────────────────────────────────────
-    from app.models.user import Plan
-    if current_user.plan == Plan.FREE:
-        max_dur = settings.FREE_MAX_VIDEO_MINUTES * 60
-        if meta["duration_seconds"] > max_dur:
-            os.remove(file_path)
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Free plan is limited to {settings.FREE_MAX_VIDEO_MINUTES}-minute videos. "
-                       "Upgrade to Pro for unlimited length.",
-            )
-
-    # ── Generate thumbnail ────────────────────────────────────────────────────
-    thumb_filename = f"{uuid.uuid4().hex}.jpg"
-    thumb_path = os.path.join(settings.THUMBNAIL_DIR, thumb_filename)
-    os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
-    try:
+        # ── 3. Generate Thumbnail (local temp) ───────────────────────────────
+        thumb_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
         ts = min(1.0, meta["duration_seconds"] / 2)
-        await generate_thumbnail(file_path, thumb_path, timestamp=ts)
-    except Exception:
-        thumb_path = None  # non-fatal
+        await generate_thumbnail(tmp_path, thumb_tmp, timestamp=ts)
 
-    # ── Persist to DB ─────────────────────────────────────────────────────────
-    video = Video(
-        id=str(uuid.uuid4()),
-        owner_id=current_user.id,
-        original_filename=file.filename or stored_name,
-        stored_filename=stored_name,
-        file_path=file_path,
-        file_size_bytes=size,
-        mime_type=file.content_type,
-        duration_seconds=meta["duration_seconds"],
-        width=meta["width"],
-        height=meta["height"],
-        fps=meta["fps"],
-        has_audio=meta["has_audio"],
-        thumbnail_path=thumb_path,
-        title=title,
-        description=description,
-    )
-    db.add(video)
-    await db.flush()
+        # ── 4. Upload to Permanent Storage ────────────────────────────────────
+        # Final paths in storage
+        storage_video_path = f"uploads/{stored_name}"
+        storage_thumb_path = f"thumbnails/{uuid.uuid4().hex}.jpg"
 
-    logger.info(f"Upload complete: {video.id} ({video.duration_seconds}s)")
-    return _to_upload_response(video)
+        with open(tmp_path, "rb") as f:
+            await storage_service.upload_file(f, storage_video_path)
+        
+        with open(thumb_tmp, "rb") as f:
+            await storage_service.upload_file(f, storage_thumb_path)
+
+        # ── 5. Persist to DB ──────────────────────────────────────────────────
+        video = Video(
+            id=str(uuid.uuid4()),
+            owner_id=current_user.id,
+            original_filename=file.filename or stored_name,
+            stored_filename=stored_name,
+            file_path=storage_video_path,
+            file_size_bytes=size,
+            mime_type=file.content_type,
+            duration_seconds=meta["duration_seconds"],
+            width=meta["width"],
+            height=meta["height"],
+            fps=meta["fps"],
+            has_audio=meta["has_audio"],
+            thumbnail_path=storage_thumb_path,
+            title=title,
+            description=description,
+        )
+        db.add(video)
+        await db.flush()
+
+        # Clean up temp files
+        os.remove(tmp_path)
+        os.remove(thumb_tmp)
+
+        thumb_url = await _thumbnail_url(video)
+        return _to_upload_response(video, thumb_url)
+
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/", response_model=dict)

@@ -26,6 +26,14 @@ export default function StudioScreen() {
     fetchJobs();
   }, []);
 
+  // Auto-poll while jobs are actively processing
+  useEffect(() => {
+    const hasActive = jobs.some(j => j.status === 'pending' || j.status === 'processing');
+    if (!hasActive) return;
+    const interval = setInterval(() => fetchJobs(), 4000);
+    return () => clearInterval(interval);
+  }, [jobs, fetchJobs]);
+
   const handleVideoSelected = async (uri: string, filename: string, type: string, file?: any) => {
     try {
       const result = await uploadVideo(uri, filename, type, file);
@@ -39,7 +47,13 @@ export default function StudioScreen() {
     if (!lastUploadedVideoId) return;
     
     try {
-      await createJob(lastUploadedVideoId, 'pattern_cut', { ...parameters, preset_id: presetId });
+      // The preset's job_type is determined by the backend when preset_id is provided.
+      // For manual/custom, we default to pattern_cut. For AI presets, the job_type
+      // is embedded in the parameters passed from ProcessWizard.
+      const jobType = parameters._job_type || 'pattern_cut';
+      const { _job_type, ...cleanParams } = parameters;
+      
+      await createJob(lastUploadedVideoId, jobType, { ...cleanParams, preset_id: presetId });
       setLastUploadedVideoId(null);
       Alert.alert('Success', 'AI processing has started!');
     } catch (error: any) {

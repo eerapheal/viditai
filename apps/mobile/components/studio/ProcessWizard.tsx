@@ -44,6 +44,7 @@ export function ProcessWizard({ videoId, onProcess, isProcessing }: ProcessWizar
   const handleStart = () => {
     if (selectedPreset) {
       onProcess(selectedPreset.id, {
+        _job_type: selectedPreset.job_type,
         keep_seconds: keepSeconds,
         cut_seconds: cutSeconds,
         audio_mode: audioMode,

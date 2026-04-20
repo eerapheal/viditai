@@ -14,9 +14,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./autocut.db"
 
     # ── File storage ──────────────────────────────────────────────────────────
+    STORAGE_TYPE: str = "local"           # "local" or "s3"
     UPLOAD_DIR: str = "storage/uploads"
     OUTPUT_DIR: str = "storage/output"
     THUMBNAIL_DIR: str = "storage/thumbnails"
+    
+    # S3 Settings (required if STORAGE_TYPE == "s3")
+    S3_BUCKET_NAME: str = ""
+    S3_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    S3_ENDPOINT_URL: str = ""              # for Cloudflare R2 / Minio
+    
     MAX_UPLOAD_SIZE_MB: int = 500          # 500 MB max upload
     ALLOWED_VIDEO_TYPES: List[str] = [
         "video/mp4", "video/quicktime", "video/x-msvideo",

@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Mail, ArrowLeft, MailCheck } from "lucide-react";
+import { API_V1 } from "@/lib/config";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -34,7 +35,7 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotFormValues) => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/v1/auth/password-reset-request", {
+      const response = await fetch(`${API_V1}/auth/password-reset-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

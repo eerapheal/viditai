@@ -22,13 +22,15 @@ from app.core.logging_config import logger
 from app.core.limiter import limiter
 from fastapi import Request
 
+from app.services.storage import storage_service
+
 router = APIRouter()
 
 
-def _build_job_response(job: Job) -> JobResponse:
+async def _build_job_response(job: Job) -> JobResponse:
     download_url = None
-    if job.status == JobStatus.COMPLETED and job.output_filename:
-        download_url = f"/files/output/{job.output_filename}"
+    if job.status == JobStatus.COMPLETED and job.output_file_path:
+        download_url = await storage_service.get_download_url(job.output_file_path)
     
     # Map the risk details from the job model or defaults
     risk_level = job.parameters.get("risk_level", "low")
@@ -161,7 +163,7 @@ async def create_job(
     # 5. Dispatch to background worker
     background_tasks.add_task(enqueue_job, job.id)
 
-    return _build_job_response(job)
+    return await _build_job_response(job)
 
 
 @router.get("/", response_model=dict)
@@ -196,12 +198,16 @@ async def list_jobs(
     total = (await db.execute(count_q)).scalar_one()
     jobs = (await db.execute(query.order_by(Job.created_at.desc()).offset(offset).limit(page_size))).scalars().all()
 
+    # Build responses in parallel for speed
+    import asyncio
+    items = await asyncio.gather(*[_build_job_response(j) for j in jobs])
+
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
         "pages": (total + page_size - 1) // page_size,
-        "items": [_build_job_response(j).model_dump() for j in jobs],
+        "items": [i.model_dump() for i in items],
     }
 
 
@@ -218,7 +224,7 @@ async def get_job(
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
-    return _build_job_response(job)
+    return await _build_job_response(job)
 
 
 @router.post("/{job_id}/cancel", response_model=JobResponse)
@@ -247,7 +253,7 @@ async def cancel_job(
     
     logger.info(f"Job {job_id} cancelled by user")
 
-    return _build_job_response(job)
+    return await _build_job_response(job)
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

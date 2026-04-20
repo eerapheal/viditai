@@ -115,12 +115,15 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
                     </div>
                     
                     <div className="flex items-center justify-between mt-2">
-                         <div className="flex gap-1">
-                            {Object.entries(preset.parameters).slice(0, 2).map(([k, v]) => (
-                                <span key={k} className="text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-400">
-                                   {k.replace('_seconds', '')}: {v as any}s
-                                </span>
-                            ))}
+                         <div className="flex gap-1 flex-wrap">
+                            <span className="text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-400 capitalize">
+                              {preset.job_type.replace(/_/g, " ")}
+                            </span>
+                            {preset.parameters?.keep_seconds && (
+                              <span className="text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-400">
+                                {preset.parameters.keep_seconds}s keep
+                              </span>
+                            )}
                          </div>
                          {selectedPresetId === preset.id && <Zap size={14} className="text-blue-500 fill-blue-500" />}
                     </div>

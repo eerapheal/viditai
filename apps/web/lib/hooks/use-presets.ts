@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import Cookies from "js-cookie";
+import { API_V1 } from "@/lib/config";
 
 export interface Preset {
   id: string;
@@ -19,7 +20,7 @@ export function usePresets() {
     setIsLoading(true);
     const token = Cookies.get("auth_token");
     try {
-      const response = await fetch("http://localhost:8000/api/v1/presets/", {
+      const response = await fetch(`${API_V1}/presets/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import { API_V1 } from "@/lib/config";
 
 export type UserRole = "user" | "admin" | "super_admin";
 
@@ -85,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
 
     try {
-      const response = await fetch("http://localhost:8000/api/v1/auth/me", {
+      const response = await fetch(`${API_V1}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {

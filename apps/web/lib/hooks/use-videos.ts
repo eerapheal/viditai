@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import Cookies from "js-cookie";
+import { API_BASE, API_V1 } from "@/lib/config";
 
 export interface VideoMetadata {
   id: string;
@@ -22,7 +23,7 @@ export function useVideos() {
     setIsLoading(true);
     const token = Cookies.get("auth_token");
     try {
-      const response = await fetch("http://localhost:8000/api/v1/videos/", {
+      const response = await fetch(`${API_V1}/videos/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -46,7 +47,7 @@ export function useVideos() {
       // Using XMLHttpRequest for progress tracking
       return new Promise<VideoMetadata>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", "http://localhost:8000/api/v1/videos/upload", true);
+        xhr.open("POST", `${API_V1}/videos/upload`, true);
         xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
         xhr.upload.onprogress = (event) => {
@@ -85,7 +86,7 @@ export function useVideos() {
   const deleteVideo = async (id: string) => {
     const token = Cookies.get("auth_token");
     try {
-        const response = await fetch(`http://localhost:8000/api/v1/videos/${id}`, {
+        const response = await fetch(`${API_V1}/videos/${id}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
         });

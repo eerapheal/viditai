@@ -7,6 +7,7 @@ import { Job } from "@/lib/hooks/use-jobs";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { AIButton } from "@/components/ui/AIButton";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/config";
 
 interface VideoResultViewProps {
   job: Job;
@@ -42,9 +43,14 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
               </div>
            </AIButton>
            <a 
-            href={`http://localhost:8000${job.download_url}`}
+            href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
             download
-            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 font-bold transition-all text-white shadow-lg shadow-blue-500/20"
+            className={cn(
+              "flex items-center gap-2 px-6 py-2.5 rounded-full font-bold transition-all text-white shadow-lg",
+              job.download_url
+                ? "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20"
+                : "bg-slate-700 cursor-not-allowed opacity-50"
+            )}
            >
               <Download size={18} />
               <span>Download MP4</span>
@@ -56,7 +62,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
         <div className="lg:col-span-2 space-y-6">
           <GlassCard className="p-0 overflow-hidden bg-black border-slate-800">
             <video 
-              src={`http://localhost:8000${job.download_url}`}
+              src={job.download_url ? `${API_BASE}${job.download_url}` : undefined}
               controls
               className="w-full aspect-video"
               autoPlay

@@ -6,6 +6,7 @@ import { Clock, CheckCircle2, AlertCircle, Loader2, Download, ExternalLink, XCir
 import { Job, useJobs } from "@/lib/hooks/use-jobs";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/config";
 
 interface JobActivityProps {
   videoId?: string;
@@ -87,14 +88,14 @@ export function JobActivity({ videoId, onViewResult }: JobActivityProps) {
                     {job.status === "processing" && (
                       <div className="mt-2 space-y-1.5">
                         <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                          <span>Processing rhythm...</span>
-                          <span>{job.progress_pct}%</span>
+                          <span>Processing...</span>
+                          <span>{job.progress_pct ?? job.progress ?? 0}%</span>
                         </div>
                         <div className="h-1 w-full bg-slate-900 rounded-full overflow-hidden">
                           <motion.div 
                             className="h-full bg-blue-500"
                             initial={{ width: 0 }}
-                            animate={{ width: `${job.progress_pct}%` }}
+                            animate={{ width: `${job.progress_pct ?? job.progress ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -137,7 +138,7 @@ export function JobActivity({ videoId, onViewResult }: JobActivityProps) {
                         <ExternalLink size={18} />
                       </button>
                       <a 
-                        href={`http://localhost:8000${job.download_url}`}
+                       href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
                         download
                         className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
                         title="Download"
