@@ -40,7 +40,16 @@ async def lifespan(app: FastAPI):
         await seed_default_presets(db)
         
     logger.info("Application started — Database initialized and seeded")
+    
+    # ── START WORKER IN BACKGROUND ──────────────────────────────────────────
+    from app.worker import main_loop
+    worker_task = asyncio.create_task(main_loop())
+    logger.info("🚀 AI Engine (Worker) integrated and running in background")
+    
     yield
+    
+    # Shutdown
+    worker_task.cancel()
     logger.info("Application shutting down")
     # Cleanup on shutdown (optional: purge temp files)
 

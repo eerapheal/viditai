@@ -1,9 +1,12 @@
 # AutoCut AI - API Runner
 # This script ensures the correct Virtual Environment (.venv) is used.
 
-if (Test-Path ".\.venv\Scripts\python.exe") {
+$VENV_PATH = "$PSScriptRoot\.venv"
+
+if (Test-Path "$VENV_PATH\Scripts\python.exe") {
     Write-Host "🚀 Launching AutoCut AI API using virtual environment..." -ForegroundColor Cyan
-    .\.venv\Scripts\python.exe start.py
+    Set-Location $PSScriptRoot
+    & "$VENV_PATH\Scripts\python.exe" start.py
 } else {
-    Write-Error "❌ Virtual environment (.venv) not found! Please ask Antigravity to rebuild it."
+    Write-Error "❌ Virtual environment (.venv) not found at $VENV_PATH!"
 }

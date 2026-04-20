@@ -17,7 +17,6 @@ from app.models.job import Job, JobType, JobStatus
 from app.models.video import Video
 from app.models.preset import Preset
 from app.schemas.job import JobCreate, JobResponse
-from app.worker import enqueue_job
 from app.core.logging_config import logger
 from app.core.limiter import limiter
 from fastapi import Request
@@ -94,7 +93,6 @@ async def _check_ai_access(user: User, job_type: JobType) -> None:
 async def create_job(
     request: Request,
     body: JobCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -160,8 +158,8 @@ async def create_job(
     current_user.monthly_exports_used += 1
     await db.flush()
 
-    # 5. Dispatch to background worker
-    background_tasks.add_task(enqueue_job, job.id)
+    # 5. Job will be picked up by the standalone worker loop
+    await db.commit()
 
     return await _build_job_response(job)
 

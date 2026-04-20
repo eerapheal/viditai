@@ -1,38 +1,28 @@
-"""
-Background Job Worker
----------------------
-Dispatched via FastAPI BackgroundTasks (enqueue_job).
-Runs the correct service for each JobType and updates the Job record
-with progress, output info, and final status.
-
-For production scale: swap BackgroundTasks for Celery + Redis or ARQ.
-"""
 import os
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
 from app.services.storage import storage_service
 from app.core.config import settings
 from app.core.logging_config import logger
+from app.models.job import Job, JobStatus, JobType, RiskLevel
 import tempfile
 import shutil
 
 async def _update_job(job_id: str, **fields) -> None:
     """Helper: open a fresh DB session and update job fields."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Job).where(Job.id == job_id))
-        job = result.scalar_one_or_none()
-        if not job:
-            return
-        for k, v in fields.items():
-            setattr(job, k, v)
+        await db.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(**fields)
+        )
         await db.commit()
-
 
 async def _run_job(job_id: str) -> None:
     """Core execution: dispatch to the correct service."""
@@ -55,6 +45,8 @@ async def _run_job(job_id: str) -> None:
         progress_pct=0,
     )
 
+    logger.info(f"Worker: Starting Job {job_id} ({job.job_type})")
+    
     # ── 1. Fetch Source Asset to Local Sandbox ──────────────────────────────
     source_key = job.source_video.file_path
     local_source_path = await storage_service.get_file_path(source_key)
@@ -69,8 +61,6 @@ async def _run_job(job_id: str) -> None:
     output_path: Optional[str] = None
 
     try:
-        from app.models.job import JobType
-        
         # ── 2. Route to correct service ───────────────────────────────────────
         if job.job_type == JobType.PATTERN_CUT:
             from app.services.pattern_cut import apply_pattern_cut
@@ -129,14 +119,12 @@ async def _run_job(job_id: str) -> None:
             temp_files.append(output_path)
 
         # ── 3. Add Watermark if Free Plan ────────────────────────────────────
-        from app.models.job import JobStatus
         if job.has_watermark and output_path and output_path.endswith(".mp4"):
             watermarked_path = await _apply_watermark(output_path)
             temp_files.append(watermarked_path)
             output_path = watermarked_path
 
         # ── 4. Audio Safety Check ───────────────────────────────────────────
-        from app.models.job import RiskLevel
         from app.services.ffmpeg import probe_video
         risk_level = RiskLevel.LOW
         audio_mode = params.get("audio_mode", "original")
@@ -178,6 +166,7 @@ async def _run_job(job_id: str) -> None:
             risk_level=risk_level,
             risk_details={"audio_mode": audio_mode, "transformation": job.job_type.value}
         )
+        logger.info(f"Worker: Successfully completed Job {job_id}")
 
     except Exception as exc:
         logger.error(f"Worker Error: {exc}", exc_info=True)
@@ -199,59 +188,69 @@ async def _run_job(job_id: str) -> None:
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp file {f}: {e}")
 
-
 async def _apply_watermark(input_path: str) -> str:
-    """Burn a subtle AutoCut AI watermark into the bottom-right corner."""
     from app.services.ffmpeg import run_ffmpeg
-
     output_path = input_path.replace(".mp4", "_wm.mp4")
     await run_ffmpeg(
         "-i", input_path,
         "-vf",
-        "drawtext=text='AutoCut AI'"
-        ":fontcolor=white@0.45:fontsize=22"
-        ":x=(w-text_w)-16:y=(h-text_h)-16"
-        ":shadowcolor=black@0.4:shadowx=1:shadowy=1",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "copy",
-        "-movflags", "+faststart",
+        "drawtext=text='AutoCut AI':fontcolor=white@0.45:fontsize=22:x=(w-text_w)-16:y=(h-text_h)-16:shadowcolor=black@0.4:shadowx=1:shadowy=1",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "copy", "-movflags", "+faststart",
         output_path,
     )
     return output_path
 
-
 async def _mute_audio(input_path: str) -> str:
-    """Strip all audio tracks from the video."""
+    from app.services.ffmpeg import run_ffmpeg
     output_path = input_path.replace(".mp4", "_muted.mp4")
     await run_ffmpeg("-i", input_path, "-an", "-c:v", "copy", output_path)
-    os.replace(output_path, input_path)  # Overwrite original processed file
+    os.replace(output_path, input_path)
     return input_path
 
-
 async def _replace_audio(input_path: str, audio_source: str) -> str:
-    """Replace original audio with a new track, looping if necessary."""
+    from app.services.ffmpeg import run_ffmpeg
     output_path = input_path.replace(".mp4", "_remixed.mp4")
-    # audio_source could be a local path or URL (FFmpeg handles both)
     await run_ffmpeg(
-        "-i", input_path,
-        "-stream_loop", "-1", "-i", audio_source,
-        "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "copy", "-c:a", "aac", "-shortest",
+        "-i", input_path, "-stream_loop", "-1", "-i", audio_source,
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-shortest",
         output_path
     )
     os.replace(output_path, input_path)
     return input_path
 
+async def main_loop():
+    """Standalone worker loop: polls DB for pending jobs."""
+    logger.info("🚀 AutoCut AI Worker started and polling...")
+    
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                # 1. Cleanup Zombie Jobs (stuck in PROCESSING for > 30 mins)
+                thirty_mins_ago = datetime.now(timezone.utc) - timedelta(minutes=30)
+                await db.execute(
+                    update(Job)
+                    .where(Job.status == JobStatus.PROCESSING, Job.started_at < thirty_mins_ago)
+                    .values(status=JobStatus.PENDING, started_at=None, progress_pct=0)
+                )
+                await db.commit()
 
-def enqueue_job(job_id: str) -> None:
-    """
-    Entry point called by FastAPI BackgroundTasks.
-    Creates an asyncio Task in the running event loop.
-    """
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        loop.create_task(_run_job(job_id))
-    else:
-        loop.run_until_complete(_run_job(job_id))
+                # 2. Pick up the next PENDING job
+                result = await db.execute(
+                    select(Job.id)
+                    .where(Job.status == JobStatus.PENDING)
+                    .order_by(Job.created_at.asc())
+                    .limit(1)
+                )
+                job_id = result.scalar_one_or_none()
+
+            if job_id:
+                await _run_job(job_id)
+            else:
+                await asyncio.sleep(2)  # Wait if no jobs found
+                
+        except Exception as e:
+            logger.error(f"Worker Loop Error: {e}")
+            await asyncio.sleep(5)
+
+if __name__ == "__main__":
+    asyncio.run(main_loop())

@@ -1,12 +1,12 @@
-# AutoCut AI - Root Shortcut Runner
-# Launches the API from the root directory.
+# AutoCut AI - Master Backend Runner
+# Launches the unified API + AI Engine from the root directory.
 
-$scriptPath = "apps/api/run_api.ps1"
+$API_DIR = "$PSScriptRoot\apps\api"
+$SCRIPT = "$API_DIR\run_api.ps1"
 
-if (Test-Path $scriptPath) {
-    Set-Location "apps/api"
-    ./run_api.ps1
-    Set-Location "../../" # Return back to root on exit
+if (Test-Path $SCRIPT) {
+    Write-Host "🚀 Launching Unified AutoCut AI Backend..." -ForegroundColor Cyan
+    & $SCRIPT
 } else {
-    Write-Error "❌ API script not found at $scriptPath"
+    Write-Error "❌ Master script not found at $SCRIPT"
 }
