@@ -8,15 +8,15 @@ from app.core.database import Base
 
 
 class Plan(str, enum.Enum):
-    FREE = "free"
-    PRO = "pro"
-    BUSINESS = "business"
+    FREE = "FREE"
+    PRO = "PRO"
+    BUSINESS = "BUSINESS"
 
 
 class UserRole(str, enum.Enum):
-    USER = "user"
-    ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
+    USER = "USER"
+    ADMIN = "ADMIN"
+    SUPER_ADMIN = "SUPER_ADMIN"
 
 
 class User(Base):

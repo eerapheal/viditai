@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, Alert, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Sparkles, History, CheckCircle2, Clock, AlertTriangle } from 'lucide-react-native';
 
@@ -9,11 +9,14 @@ import { ProcessWizard } from '../../components/studio/ProcessWizard';
 import { useVideos } from '../../lib/hooks/use-videos';
 import { useJobs, Job } from '../../lib/hooks/use-jobs';
 
+import { VideoResultView } from '../../components/studio/VideoResultView';
+
 export default function StudioScreen() {
   const { uploadVideo, uploadProgress, isLoading: isUploading } = useVideos();
   const { jobs, fetchJobs, createJob, isLoading: isJobsLoading } = useJobs();
   
   const [lastUploadedVideoId, setLastUploadedVideoId] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -47,9 +50,6 @@ export default function StudioScreen() {
     if (!lastUploadedVideoId) return;
     
     try {
-      // The preset's job_type is determined by the backend when preset_id is provided.
-      // For manual/custom, we default to pattern_cut. For AI presets, the job_type
-      // is embedded in the parameters passed from ProcessWizard.
       const jobType = parameters._job_type || 'pattern_cut';
       const { _job_type, ...cleanParams } = parameters;
       
@@ -60,6 +60,17 @@ export default function StudioScreen() {
       Alert.alert('Process Error', error.message || 'Failed to start AI job');
     }
   };
+
+  if (selectedJob) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <StatusBar style="light" />
+        <View style={styles.header}>
+           <VideoResultView job={selectedJob} onBack={() => setSelectedJob(null)} />
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView 
@@ -114,7 +125,13 @@ export default function StudioScreen() {
           </GlassCard>
         ) : (
           jobs.map((job) => (
-            <JobItem key={job.job_id} job={job} />
+            <TouchableOpacity 
+              key={job.job_id} 
+              onPress={() => job.status === 'completed' && setSelectedJob(job)}
+              activeOpacity={job.status === 'completed' ? 0.7 : 1}
+            >
+              <JobItem job={job} />
+            </TouchableOpacity>
           ))
         )}
       </View>

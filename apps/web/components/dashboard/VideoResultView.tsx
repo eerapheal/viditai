@@ -24,6 +24,24 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
     }
   };
 
+  const handleShare = async () => {
+    const shareUrl = job.download_url?.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "My AI Video from Vidit AI",
+          text: "Check out this video I edited with AI!",
+          url: shareUrl,
+        });
+      } catch (err) {
+        console.log("Share failed", err);
+      }
+    } else {
+      navigator.clipboard.writeText(shareUrl || "");
+      alert("Link copied to clipboard!");
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between">
@@ -36,7 +54,10 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
         </button>
 
         <div className="flex gap-3">
-           <AIButton className="bg-slate-800 hover:bg-slate-700">
+           <AIButton 
+            onClick={handleShare}
+            className="bg-slate-800 hover:bg-slate-700"
+           >
               <div className="flex items-center gap-2">
                 <Share2 size={16} />
                 <span>Share</span>

@@ -1,12 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { LogOut, User as UserIcon, Shield, CreditCard, Bell, ChevronRight, Settings } from 'lucide-react-native';
-import { useAuth } from '@/lib/contexts/auth-context';
-import { GlassCard } from '@/components/ui/GlassCard';
+import { useAuth } from '../../lib/contexts/auth-context';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { StatusBar } from 'expo-status-bar';
+import { API_BASE } from '../../lib/api';
+import * as SecureStore from 'expo-secure-store';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const [isUpdating, setIsUpdating] = React.useState(false);
 
   const totalExports = user?.monthly_exports_used || 0;
   const exportLimit = user?.plan === 'free' ? 10 : 9999;
@@ -18,7 +21,65 @@ export default function ProfileScreen() {
       "Are you sure you want to log out of Vidit AI?",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Logout", style: "destructive", onPress: logout }
+        { text: "Logout", style: "destructive", onPress: () => logout() }
+      ]
+    );
+  };
+
+  const handleUpdateName = () => {
+    Alert.prompt(
+      "Update Name",
+      "Enter your full name",
+      async (name) => {
+        if (!name) return;
+        setIsUpdating(true);
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/users/me`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${await SecureStore.getItemAsync('token')}`,
+            },
+            body: JSON.stringify({ full_name: name }),
+          });
+          if (res.ok) {
+            await refreshUser();
+            Alert.alert("Success", "Profile updated!");
+          }
+        } catch (err) {
+          Alert.alert("Error", "Failed to update profile");
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+      'plain-text',
+      user?.full_name
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This is permanent. All your videos and subscription will be lost. Proceed?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete Everything", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              const res = await fetch(`${API_BASE}/api/v1/users/me`, {
+                method: "DELETE",
+                headers: {
+                  "Authorization": `Bearer ${await SecureStore.getItemAsync('token')}`,
+                },
+              });
+              if (res.ok) logout();
+            } catch (err) {
+              Alert.alert("Error", "Failed to delete account");
+            }
+          }
+        }
       ]
     );
   };
@@ -74,7 +135,11 @@ export default function ProfileScreen() {
         <View style={styles.menuContainer}>
           <Text style={styles.sectionTitle}>PREFERENCES</Text>
           <GlassCard style={styles.menuCard}>
-            <MenuItem icon={<UserIcon size={20} color="#94a3b8" />} title="Account Details" />
+            <MenuItem 
+              icon={<UserIcon size={20} color="#94a3b8" />} 
+              title="Account Details" 
+              onPress={handleUpdateName}
+            />
             <MenuItem icon={<Bell size={20} color="#94a3b8" />} title="Notifications" />
             <MenuItem icon={<Settings size={20} color="#94a3b8" />} title="App Settings" border={false} />
           </GlassCard>
@@ -84,6 +149,12 @@ export default function ProfileScreen() {
             <MenuItem icon={<CreditCard size={20} color="#94a3b8" />} title="Subscription" />
             <MenuItem icon={<Shield size={20} color="#94a3b8" />} title="Security & Privacy" border={false} />
           </GlassCard>
+
+          <TouchableOpacity onPress={handleDeleteAccount} style={{ marginTop: 12 }}>
+            <Text style={{ color: '#ef4444', textAlign: 'center', fontSize: 12, fontWeight: '700' }}>
+              Delete My Account Permanently
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity onPress={handleLogout} activeOpacity={0.7} style={styles.logoutButton}>
             <GlassCard style={styles.logoutCard}>
@@ -99,9 +170,9 @@ export default function ProfileScreen() {
   );
 }
 
-function MenuItem({ icon, title, border = true }: { icon: React.ReactNode, title: string, border?: boolean }) {
+function MenuItem({ icon, title, border = true, onPress }: { icon: React.ReactNode, title: string, border?: boolean, onPress?: () => void }) {
   return (
-    <TouchableOpacity style={[styles.menuItem, border && styles.menuBorder]}>
+    <TouchableOpacity onPress={onPress} style={[styles.menuItem, border && styles.menuBorder]}>
       <View style={styles.menuLeft}>
         {icon}
         <Text style={styles.menuTitle}>{title}</Text>

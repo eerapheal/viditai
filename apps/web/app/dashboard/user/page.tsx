@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library } from "lucide-react";
+import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library, User as UserIcon, Mail, Trash2, LogOut, Check, Settings } from "lucide-react";
 import { useVideos, VideoMetadata } from "@/lib/hooks/use-videos";
 import { useJobs, Job } from "@/lib/hooks/use-jobs";
 import { VideoUpload } from "@/components/dashboard/VideoUpload";
@@ -83,6 +83,12 @@ export default function UserDashboard() {
                   <Library size={16} />
                   <span>My Vault</span>
                 </button>
+                <Link href="/dashboard/user/profile">
+                  <button className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-900 border border-slate-700 hover:border-blue-500/50 hover:text-blue-400 font-bold transition-all text-sm">
+                    <Settings size={16} />
+                    <span>Settings</span>
+                  </button>
+                </Link>
                 <button 
                   onClick={() => setViewState("upload")}
                   className="flex items-center gap-2 px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-500 font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 group overflow-hidden relative"
@@ -299,7 +305,20 @@ export default function UserDashboard() {
             <VaultView onViewResult={(job) => { setSelectedJob(job); setViewState("result"); }} />
           </motion.div>
         )}
+        
       </AnimatePresence>
     </div>
+  );
+}
+
+function TextAvatar({ name, size = "md" }: { name: string, size?: "md" | "xl" }) {
+  const initial = name?.charAt(0).toUpperCase() || "?";
+  return (
+    <span className={cn(
+      "font-black text-blue-400",
+      size === "xl" ? "text-3xl" : "text-lg"
+    )}>
+      {initial}
+    </span>
   );
 }

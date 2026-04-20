@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Check, Zap, Globe, Shield } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { AIButton } from "@/components/ui/AIButton";
+import { GlassCard } from "@/components/ui/GlassCard";
 import { API_V1 } from "@/lib/config";
 import { useAuth } from "@/lib/contexts/auth-context";
 
@@ -44,73 +44,81 @@ export default function UpgradePage() {
 
       <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
         {/* Free Plan */}
-        <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-white">Free Plan</CardTitle>
-            <CardDescription>Perfect for trying out Vidit AI</CardDescription>
+        <GlassCard className="p-8 border-slate-800 flex flex-col h-full">
+          <div className="space-y-2 mb-6">
+            <h3 className="text-2xl font-bold text-white">Free Plan</h3>
+            <p className="text-slate-400 text-sm">Perfect for trying out Vidit AI</p>
             <div className="mt-4">
               <span className="text-4xl font-bold text-white">$0</span>
               <span className="text-slate-500 ml-2">/month</span>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          
+          <div className="space-y-4 flex-grow mb-8">
             <FeatureItem text="5 AI Exports per month" />
             <FeatureItem text="10-minute video limit" />
             <FeatureItem text="Subtle Watermark" />
             <FeatureItem text="Standard processing speed" />
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full" disabled>
+          </div>
+
+          <div className="mt-auto">
+            <AIButton className="w-full opacity-50 cursor-not-allowed" disabled>
               {user?.plan === "free" ? "Current Plan" : "Downgrade"}
-            </Button>
-          </CardFooter>
-        </Card>
+            </AIButton>
+          </div>
+        </GlassCard>
 
         {/* Pro Plan */}
-        <Card className="bg-slate-900/50 border-blue-500/50 backdrop-blur-sm relative overflow-hidden">
+        <GlassCard className="p-8 border-blue-500/50 relative overflow-hidden flex flex-col h-full ring-1 ring-blue-500/20">
           <div className="absolute top-0 right-0 bg-blue-500 text-white px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-bl-lg">
             Best Value
           </div>
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
+          
+          <div className="space-y-2 mb-6">
+            <h3 className="text-2xl font-bold text-white flex items-center gap-2">
               <Zap className="h-5 w-5 text-blue-400 fill-blue-400" />
               Pro Plan
-            </CardTitle>
-            <CardDescription>For serious creators and editors</CardDescription>
+            </h3>
+            <p className="text-slate-400 text-sm">For serious creators and editors</p>
             <div className="mt-4">
               <span className="text-4xl font-bold text-white">$15</span>
               <span className="text-slate-500 ml-2">/month</span>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+
+          <div className="space-y-4 flex-grow mb-8">
             <FeatureItem text="Unlimited AI Exports" active />
             <FeatureItem text="Unlimited video length" active />
             <FeatureItem text="No Watermarks" active />
             <FeatureItem text="Priority AI processing" active />
             <FeatureItem text="Early access to new features" active />
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            <Button 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+          </div>
+
+          <div className="mt-auto space-y-3">
+            <AIButton 
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
               onClick={() => handleCheckout("stripe")}
+              loading={loading === "stripe"}
               disabled={loading !== null || user?.plan === "pro"}
             >
-              {loading === "stripe" ? "Redirecting..." : "Upgrade with Stripe"}
-            </Button>
-            <Button 
-              variant="outline" 
-              className="w-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+              {user?.plan === "pro" ? "Current Plan" : "Upgrade with Stripe"}
+            </AIButton>
+            
+            <AIButton 
               onClick={() => handleCheckout("paystack")}
+              loading={loading === "paystack"}
               disabled={loading !== null || user?.plan === "pro"}
+              className="w-full bg-transparent border border-blue-500/30 hover:bg-blue-500/10 text-blue-400"
             >
-              {loading === "paystack" ? "Redirecting..." : "Upgrade with Paystack"}
-            </Button>
-            <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-slate-500 uppercase tracking-widest">
+              {user?.plan === "pro" ? "Current Plan" : "Upgrade with Paystack"}
+            </AIButton>
+
+            <div className="flex items-center justify-center gap-4 mt-4 text-[10px] text-slate-500 uppercase tracking-widest font-bold">
               <div className="flex items-center gap-1"><Shield className="h-3 w-3" /> Secure</div>
               <div className="flex items-center gap-1"><Globe className="h-3 w-3" /> Global</div>
             </div>
-          </CardFooter>
-        </Card>
+          </div>
+        </GlassCard>
       </div>
     </div>
   );
