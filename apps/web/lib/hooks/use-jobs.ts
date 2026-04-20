@@ -46,7 +46,7 @@ export function useJobs(videoId?: string) {
     }
   }, [videoId]);
 
-  const createJob = async (videoId: string, presetId?: string, parameters?: any, settings?: any) => {
+  const createJob = async (videoId: string, jobType: string = "pattern_cut", parameters: any = {}, presetId?: string) => {
     const token = Cookies.get("auth_token");
     try {
       const response = await fetch("http://localhost:8000/api/v1/jobs/", {
@@ -57,10 +57,9 @@ export function useJobs(videoId?: string) {
         },
         body: JSON.stringify({
           video_id: videoId,
+          job_type: jobType,
           preset_id: presetId,
-          job_type: "pattern_cut", // Default
-          parameters,
-          settings,
+          parameters: parameters,
         }),
       });
 

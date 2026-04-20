@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Settings2, Sparkles, ChevronRight, ArrowLeft, Loader2, Zap } from "lucide-react";
+import { Play, Settings2, Sparkles, ChevronRight, ArrowLeft, Loader2, Zap, Languages, Activity, Mic, Volume2, VolumeX, Music } from "lucide-react";
 import { usePresets, Preset } from "@/lib/hooks/use-presets";
 import { useJobs } from "@/lib/hooks/use-jobs";
 import { VideoMetadata } from "@/lib/hooks/use-videos";
@@ -35,21 +35,33 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
     mode: "original",
     library_track: "",
   });
+  
+  // Phase 4 AI Features
+  const [addCaptions, setAddCaptions] = useState(false);
+  const [removeSilence, setRemoveSilence] = useState(true);
+  const [removeLowMotion, setRemoveLowMotion] = useState(true);
+  const [voiceoverText, setVoiceoverText] = useState("");
 
   const handleStartProcess = async () => {
     setIsSubmitting(true);
     try {
-      // Phase 3 compliant createJob call
+      const jobType = selectedPreset ? selectedPreset.job_type : "pattern_cut";
+      const parameters = {
+        ...(selectedPresetId === "manual" ? customParams : selectedPreset?.parameters),
+        audio_mode: audioSettings.mode,
+        add_captions: addCaptions,
+        remove_silence: removeSilence,
+        remove_low_motion: removeLowMotion,
+        text: voiceoverText,
+      };
+
       const job = await createJob(
         video.id, 
-        selectedPresetId && selectedPresetId !== "manual" ? selectedPresetId : undefined, 
-        selectedPresetId === "manual" ? customParams : undefined,
-        {
-          audio: audioSettings,
-          cut_pattern: selectedPresetId === "manual" ? { keep: customParams.keep_seconds, remove: customParams.cut_seconds } : undefined
-        }
+        jobType,
+        parameters,
+        selectedPresetId && selectedPresetId !== "manual" ? selectedPresetId : undefined
       );
-      toast.success("Job started!");
+      toast.success("AI processing started!");
       if (onComplete) onComplete(job);
     } catch (err: any) {
       toast.error(err.message || "Failed to start processing");
@@ -249,32 +261,106 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
                 <h3 className="text-xl font-bold">Audio & Safety</h3>
              </div>
 
-             <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
-                  { id: "original", title: "Keep Original", desc: "No changes to audio. High copyright risk.", icon: <Sparkles className="text-amber-400" /> },
-                  { id: "mute", title: "Mute All", desc: "Completely silent output. Lowest risk.", icon: <Settings2 className="text-slate-400" /> },
-                  { id: "replace", title: "Replace Audio", desc: "Swap with royalty-free music. Medium risk.", icon: <Zap className="text-blue-400" /> }
+                  { id: "original", title: "Original", desc: "No changes.", icon: <Volume2 className="text-amber-400" size={18} /> },
+                  { id: "mute", title: "Mute", desc: "Silent output.", icon: <VolumeX className="text-slate-400" size={18} /> },
+                  { id: "replace", title: "Remix", desc: "Royalty-free.", icon: <Music className="text-blue-400" size={18} /> }
                 ].map((mode) => (
                   <GlassCard
                     key={mode.id}
                     onClick={() => setAudioSettings(prev => ({ ...prev, mode: mode.id }))}
                     className={cn(
-                      "p-4 cursor-pointer border-2 transition-all duration-300",
-                      audioSettings.mode === mode.id ? "border-blue-500 bg-blue-500/5 ring-4 ring-blue-500/10" : "border-slate-800 hover:border-slate-700"
+                      "p-3 cursor-pointer border-2 transition-all duration-300",
+                      audioSettings.mode === mode.id ? "border-blue-500 bg-blue-500/5" : "border-slate-800 hover:border-slate-700"
                     )}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-slate-900 flex items-center justify-center">
                         {mode.icon}
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-100">{mode.title}</h4>
-                        <p className="text-xs text-slate-400">{mode.desc}</p>
+                        <h4 className="font-bold text-xs text-slate-100">{mode.title}</h4>
+                        <p className="text-[10px] text-slate-500">{mode.desc}</p>
                       </div>
                     </div>
                   </GlassCard>
                 ))}
-             </div>
+              </div>
+
+              {/* AI Features (Phase 4) */}
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <div className="flex flex-col gap-1">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Advanced AI Magic</h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    {/* Smart Trimming */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <Activity size={16} className="text-blue-400" />
+                                <span className="text-sm font-medium">Remove Silence</span>
+                            </div>
+                            <button 
+                                onClick={() => setRemoveSilence(!removeSilence)}
+                                className={cn("w-10 h-5 rounded-full transition-all relative", removeSilence ? "bg-blue-500" : "bg-slate-700")}
+                            >
+                                <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", removeSilence ? "right-1" : "left-1")} />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <Zap size={16} className="text-blue-400" />
+                                <span className="text-sm font-medium">Trim Low Motion</span>
+                            </div>
+                            <button 
+                                onClick={() => setRemoveLowMotion(!removeLowMotion)}
+                                className={cn("w-10 h-5 rounded-full transition-all relative", removeLowMotion ? "bg-blue-500" : "bg-slate-700")}
+                            >
+                                <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", removeLowMotion ? "right-1" : "left-1")} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Captions & Script */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <Languages size={16} className="text-amber-400" />
+                                <span className="text-sm font-medium">AI Auto-Captions</span>
+                            </div>
+                            <button 
+                                onClick={() => setAddCaptions(!addCaptions)}
+                                className={cn("w-10 h-5 rounded-full transition-all relative", addCaptions ? "bg-amber-500" : "bg-slate-700")}
+                            >
+                                <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", addCaptions ? "right-1" : "left-1")} />
+                            </button>
+                        </div>
+                        
+                        {selectedPreset?.job_type === "voiceover_generation" ? (
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                    <Mic size={12} /> AI Script
+                                </label>
+                                <textarea 
+                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-h-[80px]"
+                                    placeholder="What should the AI say?"
+                                    value={voiceoverText}
+                                    onChange={(e) => setVoiceoverText(e.target.value)}
+                                />
+                            </div>
+                        ) : (
+                            <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10 flex items-center gap-3">
+                                <Sparkles className="text-blue-400" size={16} />
+                                <p className="text-[11px] text-slate-400 leading-tight">
+                                    AI will analyze your video and optimize it for social media automatically.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+              </div>
 
              <div className="flex items-center justify-end pt-6 border-t border-slate-800">
               <AIButton 
