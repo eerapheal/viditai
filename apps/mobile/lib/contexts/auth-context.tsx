@@ -10,6 +10,8 @@ export interface User {
   full_name: string | null;
   role: UserRole;
   is_active: boolean;
+  plan?: string;
+  monthly_exports_used?: number;
 }
 
 interface AuthContextType {
@@ -31,7 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const savedUser = await getUser();
       if (savedUser) {
-        if (savedUser.role !== 'user') {
+        const role = (savedUser.role || '').toLowerCase();
+        if (role !== 'user') {
           // Safety check: if an admin managed to log in, clear it
           await logout();
         } else {
@@ -50,7 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (token: string, userData: User) => {
-    if (userData.role !== 'user') {
+    const role = (userData.role || '').toLowerCase();
+    if (role !== 'user') {
       toast.error('Mobile access is restricted to standard users only.');
       return;
     }
@@ -69,7 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     try {
       const userData = await apiRequest('/auth/me');
-      if (userData.role !== 'user') {
+      const role = (userData.role || '').toLowerCase();
+      if (role !== 'user') {
         await logout();
         return;
       }

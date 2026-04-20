@@ -16,6 +16,8 @@ export interface Job {
   output_filename: string | null;
   download_url: string | null;
   error_message: string | null;
+  output_duration_seconds: number | null;
+  output_size_bytes: number | null;
   created_at: string;
 }
 
@@ -71,7 +73,12 @@ export function useJobs(videoId?: string) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || "Failed to create job");
+        const detail = typeof error.detail === "string" 
+          ? error.detail 
+          : Array.isArray(error.detail) 
+            ? error.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ")
+            : JSON.stringify(error.detail);
+        throw new Error(detail || "Failed to create job");
       }
 
       const newJob = await response.json();

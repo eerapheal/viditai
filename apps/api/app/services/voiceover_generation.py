@@ -50,7 +50,7 @@ async def generate_voiceover(
 
     # 2. Merge with Video
     output_filename = f"{base_id}_voiceover.mp4"
-    output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+    output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
     
     if overlay:
         # Mix original audio with TTS (using amix filter)

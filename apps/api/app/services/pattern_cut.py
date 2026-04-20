@@ -48,7 +48,7 @@ async def apply_pattern_cut(
 
     # 2. Write concat list to a temp file
     output_filename = f"{uuid.uuid4().hex}_pattern_cut.mp4"
-    output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+    output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=settings.UPLOAD_DIR) as f:
         concat_list_path = f.name

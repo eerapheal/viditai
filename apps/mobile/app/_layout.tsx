@@ -19,12 +19,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       // Redirect to login if not authenticated
       router.replace('/(auth)/login');
     } else if (isAuthenticated) {
-      if (user?.role !== 'user') {
+      const role = (user?.role || '').toLowerCase();
+      if (role !== 'user') {
         // Restricted access for non-user roles on mobile
-        // This shouldn't normally happen due to login checks, but added for safety
         router.replace('/(auth)/login');
       } else if (inAuthGroup) {
-        // Redirect to home if already authenticated as user
+        // Redirect to home if already authenticated
         router.replace('/(tabs)');
       }
     }

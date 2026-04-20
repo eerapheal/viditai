@@ -108,7 +108,7 @@ async def apply_silence_removal(
     if not silence_segs:
         # No silence found — just copy the file
         output_filename = f"{uuid.uuid4().hex}_silence_removed.mp4"
-        output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+        output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
         await run_ffmpeg(
             "-i", input_path,
             "-c", "copy",
@@ -126,7 +126,7 @@ async def apply_silence_removal(
 
     # ── Step 2: write concat list ─────────────────────────────────────────────
     output_filename = f"{uuid.uuid4().hex}_silence_removed.mp4"
-    output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+    output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=settings.UPLOAD_DIR) as f:
         concat_path = f.name

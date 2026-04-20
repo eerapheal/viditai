@@ -26,9 +26,24 @@ class LocalStorage(BaseStorage):
         os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
 
     async def upload_file(self, file_obj: BinaryIO, destination_path: str) -> str:
-        # destination_path here is treated as the relative path from root or absolute
+        # Check if the file object is already pointing to the destination path
+        # to avoid self-truncation when opening in 'wb' mode.
+        abs_dest = os.path.abspath(destination_path)
+        
+        # If file_obj is a file on disk, check its path
+        if hasattr(file_obj, 'name'):
+            try:
+                if os.path.abspath(file_obj.name) == abs_dest:
+                    logger.debug(f"File already at destination: {destination_path}, skipping write.")
+                    return destination_path
+            except:
+                pass
+
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
         with open(destination_path, "wb") as f:
+            # Important: if we read from file_obj, we must ensure we are at the start
+            if file_obj.seekable():
+                file_obj.seek(0)
             f.write(file_obj.read())
         return destination_path
 
@@ -42,10 +57,15 @@ class LocalStorage(BaseStorage):
         return False
 
     async def get_download_url(self, file_key: str) -> str:
-        # For local, we assume the API mounts these directories
+        # For local, we assume the API mounts these directories under /files/
+        basename = os.path.basename(file_key)
         if "thumbnails" in file_key:
-            return f"/files/thumbnails/{os.path.basename(file_key)}"
-        return f"/files/output/{os.path.basename(file_key)}"
+            return f"/files/thumbnails/{basename}"
+        elif "output" in file_key:
+            return f"/files/output/{basename}"
+        elif "uploads" in file_key:
+            return f"/files/uploads/{basename}"
+        return f"/files/output/{basename}"
 
 class S3Storage(BaseStorage):
     def __init__(self):

@@ -72,7 +72,11 @@ class JobCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_parameters(self) -> "JobCreate":
-        """Validate parameters against the correct schema for the job type."""
+        """Validate parameters against the correct schema for the job type.
+        
+        Only validates the fields relevant to each job type — extra fields
+        (like audio_mode, add_captions, etc.) are allowed and passed through.
+        """
         validators = {
             JobType.PATTERN_CUT: PatternCutParams,
             JobType.SILENCE_REMOVAL: SilenceRemovalParams,
@@ -80,7 +84,11 @@ class JobCreate(BaseModel):
             JobType.SOCIAL_EXPORT: SocialExportParams,
         }
         if self.job_type in validators:
-            validators[self.job_type](**self.parameters)  # raises ValidationError if invalid
+            schema_cls = validators[self.job_type]
+            # Extract only the fields that the schema expects
+            valid_fields = schema_cls.model_fields.keys()
+            subset = {k: v for k, v in self.parameters.items() if k in valid_fields}
+            schema_cls(**subset)  # raises ValidationError if core fields are invalid
         return self
 
 

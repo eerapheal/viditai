@@ -116,10 +116,10 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
                   animate={{ scale: 1 }}
                   className={cn(
                     "px-3 py-1 rounded-full text-[10px] font-bold border",
-                    getRiskColor((job as any).risk_level)
+                    getRiskColor(job.risk_level)
                   )}
                 >
-                  {((job as any).risk_level || "LOW").toUpperCase()}
+                  {(job.risk_level || "LOW").toUpperCase()}
                 </motion.span>
             </div>
 
@@ -158,7 +158,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
              <div className="space-y-3">
                 <div className="flex justify-between text-xs py-2 border-b border-white/5">
                     <span className="text-slate-400">Duration</span>
-                    <span className="font-medium">{(job as any).output_duration_seconds?.toFixed(1) || "0.0"}s</span>
+                    <span className="font-medium">{job.output_duration_seconds?.toFixed(1) || "0.0"}s</span>
                 </div>
                 <div className="flex justify-between text-xs py-2 border-b border-white/5">
                     <span className="text-slate-400">Format</span>
@@ -166,7 +166,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
                 </div>
                 <div className="flex justify-between text-xs py-2">
                     <span className="text-slate-400">Size</span>
-                    <span className="font-medium">{((job as any).output_size_bytes / (1024*1024)).toFixed(1)} MB</span>
+                    <span className="font-medium">{(job.output_size_bytes! / (1024*1024)).toFixed(1)} MB</span>
                 </div>
              </div>
           </GlassCard>

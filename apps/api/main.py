@@ -111,9 +111,11 @@ app.add_middleware(
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
 os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
+os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
 
 app.mount("/files/output", StaticFiles(directory=settings.OUTPUT_DIR), name="output")
 app.mount("/files/thumbnails", StaticFiles(directory=settings.THUMBNAIL_DIR), name="thumbnails")
+app.mount("/files/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 # Moved to middleware section
 

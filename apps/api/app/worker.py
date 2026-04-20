@@ -147,9 +147,19 @@ async def _run_job(job_id: str) -> None:
                     risk_level = RiskLevel.HIGH
 
         # ── 5. Ship Result to Cloud Storage ───────────────────────────────────
-        storage_output_key = f"output/{os.path.basename(output_path)}"
+        storage_output_key = f"{settings.OUTPUT_DIR}/{os.path.basename(output_path)}"
         with open(output_path, "rb") as f:
             await storage_service.upload_file(f, storage_output_key)
+
+        # Ship sidecars (SRT/VTT) if they exist in the same directory
+        base_no_ext = os.path.splitext(output_path)[0]
+        for ext in [".srt", ".vtt"]:
+            sidecar_local = base_no_ext + ext
+            if os.path.exists(sidecar_local):
+                sidecar_key = f"{settings.OUTPUT_DIR}/{os.path.basename(sidecar_local)}"
+                with open(sidecar_local, "rb") as f:
+                    await storage_service.upload_file(f, sidecar_key)
+                temp_files.append(sidecar_local)
 
         # Final Metadata
         out_info = await probe_video(output_path) if output_path.endswith(".mp4") else {}

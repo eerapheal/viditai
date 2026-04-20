@@ -100,8 +100,8 @@ async def upload_video(
 
         # ── 4. Upload to Permanent Storage ────────────────────────────────────
         # Final paths in storage
-        storage_video_path = f"uploads/{stored_name}"
-        storage_thumb_path = f"thumbnails/{uuid.uuid4().hex}.jpg"
+        storage_video_path = f"{settings.UPLOAD_DIR}/{stored_name}"
+        storage_thumb_path = f"{settings.THUMBNAIL_DIR}/{uuid.uuid4().hex}.jpg"
 
         with open(tmp_path, "rb") as f:
             await storage_service.upload_file(f, storage_video_path)

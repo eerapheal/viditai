@@ -77,7 +77,7 @@ async def apply_social_export(
         await progress_cb(10)
 
     output_filename = f"{uuid.uuid4().hex}_{export_format.value}.mp4"
-    output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
+    output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
 
     # ── Build video filter chain ──────────────────────────────────────────────
     vf_filters = [_build_scale_filter(export_format, src_w, src_h)]

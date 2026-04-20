@@ -15,6 +15,9 @@ export interface Job {
     audio_mode: string;
     note?: string;
   };
+  output_duration_seconds?: number;
+  output_size_bytes?: number;
+  output_filename?: string;
 }
 
 export function useJobs() {

@@ -6,6 +6,7 @@ from app.models.video import VideoType
 
 class VideoUploadResponse(BaseModel):
     video_id: str
+    id: str = ""  # Alias for frontend compatibility
     original_filename: str
     file_size_bytes: int
     duration: Optional[float]
@@ -17,11 +18,10 @@ class VideoUploadResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-    
-    # Keep compatibility with existing code during migration if needed
-    @property
-    def id(self) -> str:
-        return self.video_id
+
+    def model_post_init(self, __context) -> None:
+        if not self.id:
+            self.id = self.video_id
 
 
 class VideoListItem(BaseModel):

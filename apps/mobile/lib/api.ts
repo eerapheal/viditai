@@ -7,6 +7,7 @@ const DEV_API_URL = 'http://192.168.0.2:8000/api/v1';
 const PROD_API_URL = 'https://api.viditai.com/api/v1'; // Placeholder
 
 export const API_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;
+export const API_BASE = __DEV__ ? 'http://192.168.0.2:8000' : 'https://api.viditai.com';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -112,7 +113,10 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || 'API request failed');
+    const errorMsg = typeof data.detail === 'object' 
+      ? JSON.stringify(data.detail) 
+      : (data.detail || 'API request failed');
+    throw new Error(errorMsg);
   }
 
   return data;

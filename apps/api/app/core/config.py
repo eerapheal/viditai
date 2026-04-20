@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "storage/uploads"
     OUTPUT_DIR: str = "storage/output"
     THUMBNAIL_DIR: str = "storage/thumbnails"
+    SCRATCH_DIR: str = "storage/scratch"
     
     # S3 Settings (required if STORAGE_TYPE == "s3")
     S3_BUCKET_NAME: str = ""

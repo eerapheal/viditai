@@ -117,8 +117,8 @@ async def generate_subtitles(
 
     # ── Write SRT ─────────────────────────────────────────────────────────────
     base_id = uuid.uuid4().hex
-    srt_path = os.path.join(settings.OUTPUT_DIR, f"{base_id}.srt")
-    vtt_path = os.path.join(settings.OUTPUT_DIR, f"{base_id}.vtt")
+    srt_path = os.path.join(settings.SCRATCH_DIR, f"{base_id}.srt")
+    vtt_path = os.path.join(settings.SCRATCH_DIR, f"{base_id}.vtt")
 
     with open(srt_path, "w", encoding="utf-8") as f:
         f.write(_segments_to_srt(segments))
@@ -135,7 +135,7 @@ async def generate_subtitles(
         # Escape the SRT path for FFmpeg subtitles filter
         safe_srt = srt_path.replace("\\", "/").replace(":", "\\:")
         output_video_filename = f"{base_id}_subtitled.mp4"
-        output_video_path = os.path.join(settings.OUTPUT_DIR, output_video_filename)
+        output_video_path = os.path.join(settings.SCRATCH_DIR, output_video_filename)
 
         await run_ffmpeg(
             "-i", input_path,
