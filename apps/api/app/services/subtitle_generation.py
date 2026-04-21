@@ -97,12 +97,12 @@ async def generate_subtitles(
         await progress_cb(15)
 
     # ── Transcription ─────────────────────────────────────────────────────────
-    model = whisper.load_model(model_size)
+    model = await asyncio.to_thread(whisper.load_model, model_size)
     transcribe_kwargs: dict = {"word_timestamps": False}
     if language:
         transcribe_kwargs["language"] = language
 
-    result = model.transcribe(audio_path, **transcribe_kwargs)
+    result = await asyncio.to_thread(model.transcribe, audio_path, **transcribe_kwargs)
     segments: list[dict] = result.get("segments", [])
     transcript: str = result.get("text", "")
 

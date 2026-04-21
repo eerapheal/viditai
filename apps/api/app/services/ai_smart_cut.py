@@ -13,6 +13,7 @@ original. Falls back gracefully if optional dependencies are missing.
 import os
 import uuid
 import tempfile
+import asyncio
 from typing import Optional, Callable, Awaitable
 
 from app.services.ffmpeg import run_ffmpeg, probe_video
@@ -67,8 +68,8 @@ async def _transcribe_and_find_fillers(input_path: str) -> list[tuple[float, flo
     try:
         import whisper  # type: ignore
 
-        model = whisper.load_model("base")
-        result = model.transcribe(input_path, word_timestamps=True)
+        model = await asyncio.to_thread(whisper.load_model, "base")
+        result = await asyncio.to_thread(model.transcribe, input_path, word_timestamps=True)
 
         filler_segments = []
         for seg in result.get("segments", []):

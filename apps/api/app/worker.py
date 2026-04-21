@@ -235,8 +235,8 @@ async def main_loop():
     while True:
         try:
             async with AsyncSessionLocal() as db:
-                # 1. Cleanup Zombie Jobs (stuck in PROCESSING for > 30 mins)
-                thirty_mins_ago = datetime.now(timezone.utc) - timedelta(minutes=30)
+                # 1. Cleanup Zombie Jobs (stuck in PROCESSING for > 180 mins)
+                thirty_mins_ago = datetime.now(timezone.utc) - timedelta(minutes=180)
                 await db.execute(
                     update(Job)
                     .where(Job.status == JobStatus.PROCESSING, Job.started_at < thirty_mins_ago)

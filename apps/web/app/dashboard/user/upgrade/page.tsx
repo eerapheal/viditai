@@ -56,7 +56,7 @@ export default function UpgradePage() {
           
           <div className="space-y-4 flex-grow mb-8">
             <FeatureItem text="5 AI Exports per month" />
-            <FeatureItem text="10-minute video limit" />
+            <FeatureItem text="120-minute video limit" />
             <FeatureItem text="Subtle Watermark" />
             <FeatureItem text="Standard processing speed" />
           </div>
@@ -98,7 +98,7 @@ export default function UpgradePage() {
             <AIButton 
               className="w-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
               onClick={() => handleCheckout("stripe")}
-              loading={loading === "stripe"}
+              isLoading={loading === "stripe"}
               disabled={loading !== null || user?.plan === "pro"}
             >
               {user?.plan === "pro" ? "Current Plan" : "Upgrade with Stripe"}
@@ -106,7 +106,7 @@ export default function UpgradePage() {
             
             <AIButton 
               onClick={() => handleCheckout("paystack")}
-              loading={loading === "paystack"}
+              isLoading={loading === "paystack"}
               disabled={loading !== null || user?.plan === "pro"}
               className="w-full bg-transparent border border-blue-500/30 hover:bg-blue-500/10 text-blue-400"
             >
