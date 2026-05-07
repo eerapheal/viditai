@@ -3,10 +3,10 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, CheckCircle2, AlertCircle, Loader2, Download, ExternalLink, XCircle } from "lucide-react";
-import { Job, useJobs } from "@/lib/hooks/use-jobs";
+import { downloadJobOutput, Job, useJobs } from "@/lib/hooks/use-jobs";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/config";
+import { toast } from "sonner";
 
 interface JobActivityProps {
   videoId?: string;
@@ -15,6 +15,14 @@ interface JobActivityProps {
 
 export function JobActivity({ videoId, onViewResult }: JobActivityProps) {
   const { jobs, isLoading } = useJobs(videoId);
+
+  const handleDownload = async (job: Job) => {
+    try {
+      await downloadJobOutput(job);
+    } catch (error: any) {
+      toast.error(error.message || "Download failed");
+    }
+  };
 
   if (isLoading && jobs.length === 0) {
     return (
@@ -137,14 +145,14 @@ export function JobActivity({ videoId, onViewResult }: JobActivityProps) {
                       >
                         <ExternalLink size={18} />
                       </button>
-                      <a 
-                       href={job.download_url ? `${API_BASE}${job.download_url}` : "#"}
-                        download
+                      <button
+                        onClick={() => handleDownload(job)}
+                        disabled={!job.download_url}
                         className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
                         title="Download"
                       >
                         <Download size={18} />
-                      </a>
+                      </button>
                     </>
                   )}
                 </div>

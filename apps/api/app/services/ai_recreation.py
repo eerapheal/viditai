@@ -1,7 +1,10 @@
 import json
 import os
-import tempfile
+import uuid
 from typing import Awaitable, Callable, Optional
+
+from app.core.config import settings
+from app.services.ffmpeg import run_ffmpeg
 
 
 async def build_recreation_plan(
@@ -12,9 +15,10 @@ async def build_recreation_plan(
     """
     Create the first-stage AI recreation artifact.
 
-    The actual generative video pipeline will consume this manifest later. This
-    stage records the rights-safe constraints and avoids watermark/copyright
-    stripping or platform-circumvention behavior.
+    The full generative renderer can replace this later. For now, this produces
+    a downloadable MP4 preview plus a sidecar JSON manifest, while preserving
+    the rights-safe constraints and avoiding watermark/copyright stripping or
+    platform-circumvention behavior.
     """
     if progress_cb:
         await progress_cb(20)
@@ -50,11 +54,42 @@ async def build_recreation_plan(
     if progress_cb:
         await progress_cb(70)
 
-    fd, path = tempfile.mkstemp(prefix="ai_recreation_", suffix=".json")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
+    output_path = os.path.join(settings.SCRATCH_DIR, f"{uuid.uuid4().hex}_ai_recreate.mp4")
+    manifest_path = os.path.splitext(output_path)[0] + ".json"
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2)
+
+    if progress_cb:
+        await progress_cb(80)
+
+    include_source_audio = bool(parameters.get("include_source_audio", False))
+    if include_source_audio:
+        await run_ffmpeg(
+            "-i", input_path,
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-movflags", "+faststart",
+            output_path,
+        )
+    else:
+        await run_ffmpeg(
+            "-i", input_path,
+            "-map", "0:v:0",
+            "-an",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-movflags", "+faststart",
+            output_path,
+        )
 
     if progress_cb:
         await progress_cb(95)
 
-    return path
+    return output_path

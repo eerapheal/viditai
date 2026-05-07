@@ -3,11 +3,12 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Download, Share2, Shield, Info, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { Job } from "@/lib/hooks/use-jobs";
+import { downloadJobOutput, Job } from "@/lib/hooks/use-jobs";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { AIButton } from "@/components/ui/AIButton";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/config";
+import { toast } from "sonner";
 
 interface VideoResultViewProps {
   job: Job;
@@ -15,6 +16,15 @@ interface VideoResultViewProps {
 }
 
 export function VideoResultView({ job, onBack }: VideoResultViewProps) {
+  const downloadUrl = job.download_url
+    ? job.download_url.startsWith("http")
+      ? job.download_url
+      : `${API_BASE}${job.download_url}`
+    : "";
+  const isVideoOutput = Boolean(
+    job.output_filename?.toLowerCase().endsWith(".mp4") || downloadUrl.toLowerCase().includes(".mp4")
+  );
+
   const getRiskColor = (level?: string) => {
     switch (level?.toLowerCase()) {
       case "low": return "text-green-500 bg-green-500/10 border-green-500/20";
@@ -25,20 +35,28 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
   };
 
   const handleShare = async () => {
-    const shareUrl = job.download_url?.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`;
+    if (!downloadUrl) return;
     if (navigator.share) {
       try {
         await navigator.share({
           title: "My AI Video from Vidit AI",
           text: "Check out this video I edited with AI!",
-          url: shareUrl,
+          url: downloadUrl,
         });
       } catch (err) {
         console.log("Share failed", err);
       }
     } else {
-      navigator.clipboard.writeText(shareUrl || "");
+      navigator.clipboard.writeText(downloadUrl);
       alert("Link copied to clipboard!");
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      await downloadJobOutput(job);
+    } catch (error: any) {
+      toast.error(error.message || "Download failed");
     }
   };
 
@@ -56,6 +74,7 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
         <div className="flex gap-3">
            <AIButton 
             onClick={handleShare}
+            disabled={!downloadUrl}
             className="bg-slate-800 hover:bg-slate-700"
            >
               <div className="flex items-center gap-2">
@@ -63,31 +82,40 @@ export function VideoResultView({ job, onBack }: VideoResultViewProps) {
                 <span>Share</span>
               </div>
            </AIButton>
-           <a 
-            href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
-            download
+           <button
+            onClick={handleDownload}
+            disabled={!downloadUrl}
             className={cn(
               "flex items-center gap-2 px-6 py-2.5 rounded-full font-bold transition-all text-white shadow-lg",
-              job.download_url
+              downloadUrl
                 ? "bg-blue-600 hover:bg-blue-500 shadow-blue-500/20"
                 : "bg-slate-700 cursor-not-allowed opacity-50"
             )}
            >
               <Download size={18} />
-              <span>Download MP4</span>
-           </a>
+              <span>{isVideoOutput ? "Download MP4" : "Download File"}</span>
+           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <GlassCard className="p-0 overflow-hidden bg-black border-slate-800">
-            <video 
-              src={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : undefined}
-              controls
-              className="w-full aspect-video"
-              autoPlay
-            />
+            {isVideoOutput && downloadUrl ? (
+              <video
+                src={downloadUrl}
+                controls
+                className="w-full aspect-video"
+                autoPlay
+              />
+            ) : (
+              <div className="flex aspect-video items-center justify-center bg-slate-950 text-slate-500">
+                <div className="text-center">
+                  <Info className="mx-auto mb-3" size={28} />
+                  <p className="text-sm font-semibold">The output file is ready to download.</p>
+                </div>
+              </div>
+            )}
           </GlassCard>
 
           <div className="flex items-start gap-4 p-6 rounded-2xl bg-blue-500/5 border border-blue-500/10">

@@ -4,12 +4,13 @@ import React, { useState } from "react";
 import { useAuth } from "@/lib/contexts/auth-context";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library, User as UserIcon, Mail, Trash2, LogOut, Check, Settings } from "lucide-react";
+import { Video, Clock, Plus, LayoutGrid, History, Sparkles, ArrowLeft, Library, Settings, Scissors, WandSparkles } from "lucide-react";
 import { useVideos, VideoMetadata } from "@/lib/hooks/use-videos";
 import { useJobs, Job } from "@/lib/hooks/use-jobs";
 import { VideoUpload } from "@/components/dashboard/VideoUpload";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { ProcessWizard } from "@/components/dashboard/ProcessWizard";
+import { RecreationWizard } from "@/components/dashboard/RecreationWizard";
 import { JobActivity } from "@/components/dashboard/JobActivity";
 import { VideoResultView } from "@/components/dashboard/VideoResultView";
 import { VaultView } from "@/components/dashboard/VaultView";
@@ -25,6 +26,7 @@ export default function UserDashboard() {
   const { jobs } = useJobs();
   
   const [viewState, setViewState] = useState<ViewState>("overview");
+  const [processMode, setProcessMode] = useState<"edit" | "recreate">("edit");
   const [selectedVideo, setSelectedVideo] = useState<VideoMetadata | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
@@ -49,6 +51,7 @@ export default function UserDashboard() {
 
   const handleVideoSelect = (video: VideoMetadata) => {
     setSelectedVideo(video);
+    setProcessMode("edit");
     setViewState("process");
   };
 
@@ -207,6 +210,7 @@ export default function UserDashboard() {
               <VideoUpload 
                 onUploadComplete={(v) => {
                   setSelectedVideo(v);
+                  setProcessMode("recreate");
                   setViewState("process");
                 }} 
                 onClose={() => setViewState("overview")} 
@@ -235,14 +239,43 @@ export default function UserDashboard() {
                 <p className="text-slate-400 text-sm">Target: {selectedVideo.original_filename}</p>
               </div>
             </div>
+
+            <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-1">
+              {[
+                { id: "edit", label: "AutoCut Edit", icon: <Scissors size={16} /> },
+                { id: "recreate", label: "AI Recreate", icon: <WandSparkles size={16} /> },
+              ].map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => setProcessMode(mode.id as "edit" | "recreate")}
+                  className={cn(
+                    "flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-bold transition-colors",
+                    processMode === mode.id
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                      : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                  )}
+                >
+                  {mode.icon}
+                  <span>{mode.label}</span>
+                </button>
+              ))}
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="md:col-span-2">
+                  {processMode === "edit" ? (
                     <ProcessWizard 
                         video={selectedVideo} 
                         onCancel={() => setViewState("overview")}
                         onComplete={() => setViewState("overview")}
                     />
+                  ) : (
+                    <RecreationWizard
+                      video={selectedVideo}
+                      onCancel={() => setViewState("overview")}
+                      onComplete={() => setViewState("overview")}
+                    />
+                  )}
                 </div>
                 <div className="space-y-6">
                      <GlassCard className="p-0 overflow-hidden border-slate-800">

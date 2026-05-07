@@ -21,6 +21,64 @@ export interface Job {
   created_at: string;
 }
 
+export type RecreationAction =
+  | "remove_own_branding"
+  | "replace_audio_with_licensed_track"
+  | "generate_new_voiceover"
+  | "recreate_from_storyboard"
+  | "transcript_to_new_video"
+  | "youtube_policy_check";
+
+export type RightsBasis =
+  | "original_creator"
+  | "licensed"
+  | "public_domain"
+  | "client_supplied"
+  | "other_authorized";
+
+export type SourceTreatment =
+  | "reference_only"
+  | "transcript_to_new_video"
+  | "storyboard_to_new_video"
+  | "rights_safe_remix";
+
+export type AudioStrategy = "mute" | "licensed_replacement" | "original_if_owned";
+
+export interface RecreationPayload {
+  video_id: string;
+  title?: string;
+  target_platform: string;
+  source_treatment: SourceTreatment;
+  prompt?: string;
+  desired_changes: string[];
+  requested_actions: RecreationAction[];
+  audio_strategy: AudioStrategy;
+  include_source_audio: boolean;
+  own_branding?: {
+    enabled: boolean;
+    brand_owner_confirmed: boolean;
+    brand_name?: string;
+    notes?: string;
+  };
+  rights_attestation: {
+    ownership_confirmed: boolean;
+    rights_basis: RightsBasis;
+    allow_ai_transformation: boolean;
+    allow_youtube_upload: boolean;
+    notes?: string;
+  };
+}
+
+export interface RecreationJob {
+  job_id: string;
+  status: JobStatus;
+  video_id: string;
+  job_type: "ai_recreate";
+  safety_policy: string;
+  next_step: string;
+  parameters: Record<string, any>;
+}
+
 export function useJobs(videoId?: string) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -90,6 +148,53 @@ export function useJobs(videoId?: string) {
     }
   };
 
+  const createRecreation = async (payload: RecreationPayload): Promise<RecreationJob> => {
+    const token = Cookies.get("auth_token");
+    try {
+      const response = await fetch(`${API_V1}/recreations/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        const detail = typeof error.detail === "string"
+          ? error.detail
+          : Array.isArray(error.detail)
+            ? error.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ")
+            : JSON.stringify(error.detail);
+        throw new Error(detail || "Failed to create recreation");
+      }
+
+      const recreation = await response.json();
+      const jobLike: Job = {
+        id: recreation.job_id,
+        job_id: recreation.job_id,
+        job_type: recreation.job_type,
+        status: recreation.status,
+        progress: 0,
+        progress_pct: 0,
+        risk_level: recreation.parameters?.risk_level || "medium",
+        risk_details: recreation.parameters?.risk_details || {},
+        output_filename: null,
+        download_url: null,
+        error_message: null,
+        output_duration_seconds: null,
+        output_size_bytes: null,
+        created_at: new Date().toISOString(),
+      };
+      setJobs((prev) => [jobLike, ...prev]);
+      return recreation;
+    } catch (error) {
+      console.error("Failed to create recreation:", error);
+      throw error;
+    }
+  };
+
   // Polling for active jobs
   useEffect(() => {
     const activeJobs = jobs.filter(j => j.status === "pending" || j.status === "processing");
@@ -110,6 +215,7 @@ export function useJobs(videoId?: string) {
     jobs,
     isLoading,
     createJob,
+    createRecreation,
     refreshJobs: fetchJobs,
   };
 }
