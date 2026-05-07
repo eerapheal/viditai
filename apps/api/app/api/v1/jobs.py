@@ -80,7 +80,7 @@ async def _check_quota(user: User, db: AsyncSession) -> None:
 
 async def _check_ai_access(user: User, job_type: JobType) -> None:
     """Block free users from AI-tier job types."""
-    ai_types = {JobType.AI_SMART_CUT, JobType.SUBTITLE_GENERATION}
+    ai_types = {JobType.AI_SMART_CUT, JobType.AI_RECREATE, JobType.SUBTITLE_GENERATION}
     if job_type in ai_types and user.plan == Plan.FREE:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -115,6 +115,11 @@ async def create_job(
     # 3. Handle Settings & Presets
     final_params = body.parameters or {}
     job_type = body.job_type
+    if job_type == JobType.AI_RECREATE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use /api/v1/recreations for AI recreation jobs so rights attestation can be verified.",
+        )
 
     # If settings are provided (Phase 3 UI), map them to parameters
     if body.settings:

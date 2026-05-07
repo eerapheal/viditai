@@ -11,6 +11,7 @@ class JobType(str, enum.Enum):
     PATTERN_CUT = "pattern_cut"      # keep N sec / cut M sec
     SILENCE_REMOVAL = "silence_removal"
     AI_SMART_CUT = "ai_smart_cut"
+    AI_RECREATE = "ai_recreate"
     SUBTITLE_GENERATION = "subtitle_generation"
     VOICEOVER_GENERATION = "voiceover_generation"
     SOCIAL_EXPORT = "social_export"

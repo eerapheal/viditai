@@ -212,3 +212,79 @@ def test_job_create_validates_params():
             job_type="pattern_cut",
             parameters={"keep_seconds": -5, "cut_seconds": 1},
         )
+
+
+def test_recreation_requires_rights_attestation():
+    from app.schemas.recreation import RecreationCreate
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        RecreationCreate(
+            video_id="abc",
+            requested_actions=[],
+            rights_attestation={
+                "ownership_confirmed": False,
+                "rights_basis": "original_creator",
+                "allow_ai_transformation": True,
+                "allow_youtube_upload": True,
+            },
+        )
+
+
+def test_recreation_rejects_watermark_removal():
+    from app.schemas.recreation import RecreationCreate
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        RecreationCreate(
+            video_id="abc",
+            requested_actions=["remove watermark"],
+            rights_attestation={
+                "ownership_confirmed": True,
+                "rights_basis": "licensed",
+                "allow_ai_transformation": True,
+                "allow_youtube_upload": True,
+            },
+        )
+
+
+def test_recreation_allows_remove_own_branding_with_attestation():
+    from app.schemas.recreation import RecreationCreate
+
+    request = RecreationCreate(
+        video_id="abc",
+        requested_actions=["remove_own_branding", "youtube_policy_check"],
+        own_branding={
+            "enabled": True,
+            "brand_owner_confirmed": True,
+            "brand_name": "My Channel",
+        },
+        rights_attestation={
+            "ownership_confirmed": True,
+            "rights_basis": "original_creator",
+            "allow_ai_transformation": True,
+            "allow_youtube_upload": True,
+        },
+    )
+
+    assert [action.value for action in request.requested_actions] == [
+        "remove_own_branding",
+        "youtube_policy_check",
+    ]
+
+
+def test_recreation_rejects_remove_own_branding_without_attestation():
+    from app.schemas.recreation import RecreationCreate
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        RecreationCreate(
+            video_id="abc",
+            requested_actions=["remove_own_branding"],
+            rights_attestation={
+                "ownership_confirmed": True,
+                "rights_basis": "original_creator",
+                "allow_ai_transformation": True,
+                "allow_youtube_upload": True,
+            },
+        )

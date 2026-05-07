@@ -115,6 +115,14 @@ async def _run_job(job_id: str) -> None:
             )
             output_path = sub_result.get("output_video_path") or sub_result["srt_path"]
 
+        elif job.job_type == JobType.AI_RECREATE:
+            from app.services.ai_recreation import build_recreation_plan
+            output_path = await build_recreation_plan(
+                input_path=local_source_path,
+                parameters=params,
+                progress_cb=progress_cb,
+            )
+
         if output_path:
             temp_files.append(output_path)
 
