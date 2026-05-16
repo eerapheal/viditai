@@ -8,6 +8,7 @@ Uses OpenAI Whisper to transcribe video audio and produces:
 
 If Whisper is not installed the service raises a clear RuntimeError.
 """
+import asyncio
 import os
 import uuid
 from typing import Optional, Callable, Awaitable
@@ -82,7 +83,9 @@ async def generate_subtitles(
 
     # ── Extract audio track for faster Whisper processing ────────────────────
     audio_filename = f"{uuid.uuid4().hex}_audio.wav"
-    audio_path = os.path.join(settings.UPLOAD_DIR, audio_filename)
+    # Write to SCRATCH_DIR (not UPLOAD_DIR) — this is a temporary processing artifact.
+    os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
+    audio_path = os.path.join(settings.SCRATCH_DIR, audio_filename)
 
     await run_ffmpeg(
         "-i", input_path,

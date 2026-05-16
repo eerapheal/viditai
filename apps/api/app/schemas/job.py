@@ -29,6 +29,27 @@ class AISmartCutParams(BaseModel):
     target_duration_pct: int = Field(30, ge=5, le=100, description="Target output length as % of original")
 
 
+# ── Manual Crop ─────────────────────────────────────────────────────────────
+
+class CropRect(BaseModel):
+    x: float = Field(0.0, ge=0, le=1)
+    y: float = Field(0.0, ge=0, le=1)
+    width: float = Field(1.0, gt=0, le=1)
+    height: float = Field(1.0, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "CropRect":
+        if self.x + self.width > 1.0001 or self.y + self.height > 1.0001:
+            raise ValueError("Crop rectangle must stay inside the source frame.")
+        return self
+
+
+class ManualCropParams(BaseModel):
+    enabled: bool = False
+    mode: Literal["edge_to_edge", "spot_to_spot"] = "spot_to_spot"
+    rect: CropRect = Field(default_factory=CropRect)
+
+
 # ── Social Export ─────────────────────────────────────────────────────────────
 
 class SocialExportParams(BaseModel):
@@ -89,6 +110,8 @@ class JobCreate(BaseModel):
             valid_fields = schema_cls.model_fields.keys()
             subset = {k: v for k, v in self.parameters.items() if k in valid_fields}
             schema_cls(**subset)  # raises ValidationError if core fields are invalid
+        if "crop" in self.parameters and isinstance(self.parameters["crop"], dict):
+            ManualCropParams(**self.parameters["crop"])
         return self
 
 

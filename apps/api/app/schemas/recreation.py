@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -60,6 +60,25 @@ class OwnBrandingAttestation(BaseModel):
     )
 
 
+class CropRect(BaseModel):
+    x: float = Field(0.0, ge=0, le=1)
+    y: float = Field(0.0, ge=0, le=1)
+    width: float = Field(1.0, gt=0, le=1)
+    height: float = Field(1.0, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "CropRect":
+        if self.x + self.width > 1.0001 or self.y + self.height > 1.0001:
+            raise ValueError("Crop rectangle must stay inside the source frame.")
+        return self
+
+
+class ManualCropParams(BaseModel):
+    enabled: bool = False
+    mode: Literal["edge_to_edge", "spot_to_spot"] = "spot_to_spot"
+    rect: CropRect = Field(default_factory=CropRect)
+
+
 class RecreationCreate(BaseModel):
     video_id: str
     title: Optional[str] = Field(None, max_length=160)
@@ -73,6 +92,7 @@ class RecreationCreate(BaseModel):
     )
     audio_strategy: AudioStrategy = AudioStrategy.MUTE
     include_source_audio: bool = False
+    crop: Optional[ManualCropParams] = None
     own_branding: Optional[OwnBrandingAttestation] = None
     rights_attestation: RightsAttestation
 

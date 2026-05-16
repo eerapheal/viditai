@@ -10,7 +10,6 @@ Result: a rhythm-edited video — the fundamental AutoCut feature.
 """
 import os
 import uuid
-import tempfile
 from typing import Callable, Awaitable
 
 from app.services.ffmpeg import run_ffmpeg, probe_video
@@ -46,39 +45,57 @@ async def apply_pattern_cut(
     if not segments:
         raise ValueError("No segments to keep — check keep/cut values vs video length")
 
-    # 2. Write concat list to a temp file
+    # 2. Export in one FFmpeg pass.
+    #
+    # The old implementation used the concat demuxer with one inpoint/outpoint
+    # pair per kept segment. For a long video with short keep/cut cycles that
+    # means hundreds or thousands of seeks back into the same file, which can
+    # turn a simple pattern cut into an hours-long job. select/aselect scans the
+    # source once and keeps frames whose timestamp falls inside the keep window.
     output_filename = f"{uuid.uuid4().hex}_pattern_cut.mp4"
     output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
+    os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=settings.UPLOAD_DIR) as f:
-        concat_list_path = f.name
-        for seg_start, seg_dur in segments:
-            f.write(f"file '{os.path.abspath(input_path)}'\n")
-            f.write(f"inpoint {seg_start:.6f}\n")
-            f.write(f"outpoint {seg_start + seg_dur:.6f}\n")
+    cycle_expr = f"{cycle:.6f}"
+    keep_expr = f"{keep_seconds:.6f}"
+    keep_condition = f"lt(mod(t\\,{cycle_expr})\\,{keep_expr})"
 
-    try:
-        if progress_cb:
-            await progress_cb(10)
+    if progress_cb:
+        await progress_cb(10)
 
-        # 3. Run FFmpeg concat
+    if info.get("has_audio"):
         await run_ffmpeg(
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list_path,
+            "-i", input_path,
+            "-filter_complex",
+            (
+                f"[0:v]select='{keep_condition}',setpts=N/FRAME_RATE/TB[v];"
+                f"[0:a]aselect='{keep_condition}',asetpts=N/SR/TB[a]"
+            ),
+            "-map", "[v]",
+            "-map", "[a]",
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
+            "-preset", "ultrafast",
+            "-crf", "24",
+            "-threads", "0",
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
             output_path,
         )
+    else:
+        await run_ffmpeg(
+            "-i", input_path,
+            "-vf", f"select='{keep_condition}',setpts=N/FRAME_RATE/TB",
+            "-an",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "24",
+            "-threads", "0",
+            "-movflags", "+faststart",
+            output_path,
+        )
 
-        if progress_cb:
-            await progress_cb(90)
-
-    finally:
-        os.unlink(concat_list_path)
+    if progress_cb:
+        await progress_cb(90)
 
     return output_path

@@ -21,7 +21,7 @@ import { API_BASE } from "@/lib/config";
 type ViewState = "overview" | "upload" | "process" | "result" | "vault";
 
 export default function UserDashboard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { videos, isLoading: loadingVideos, deleteVideo } = useVideos();
   const { jobs } = useJobs();
   
@@ -42,12 +42,11 @@ export default function UserDashboard() {
     const interval = setInterval(() => {
       const hasActive = jobs.some(j => j.status === "processing");
       if (hasActive) {
-        const { refreshUser } = require("@/lib/contexts/auth-context").useAuth(); // Dynamic access to avoid circular or context issues
         refreshUser();
       }
     }, 10000);
     return () => clearInterval(interval);
-  }, [jobs]);
+  }, [jobs, refreshUser]);
 
   const handleVideoSelect = (video: VideoMetadata) => {
     setSelectedVideo(video);

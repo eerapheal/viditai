@@ -33,6 +33,7 @@ async def build_recreation_plan(
         "requested_actions": parameters.get("requested_actions", []),
         "audio_strategy": parameters.get("audio_strategy", "mute"),
         "include_source_audio": parameters.get("include_source_audio", False),
+        "crop": parameters.get("crop"),
         "own_branding": parameters.get("own_branding"),
         "rights_attestation": parameters.get("rights_attestation", {}),
         "allowed_capabilities": [

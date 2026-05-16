@@ -8,6 +8,7 @@ import { useJobs } from "@/lib/hooks/use-jobs";
 import { VideoMetadata } from "@/lib/hooks/use-videos";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { AIButton } from "@/components/ui/AIButton";
+import { VideoCropControl, VideoCropSettings } from "@/components/dashboard/VideoCropControl";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,11 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
   const [removeSilence, setRemoveSilence] = useState(true);
   const [removeLowMotion, setRemoveLowMotion] = useState(true);
   const [voiceoverText, setVoiceoverText] = useState("");
+  const [cropSettings, setCropSettings] = useState<VideoCropSettings>({
+    enabled: false,
+    mode: "edge_to_edge",
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+  });
 
   const handleStartProcess = async () => {
     setIsSubmitting(true);
@@ -53,6 +59,7 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
         remove_silence: removeSilence,
         remove_low_motion: removeLowMotion,
         text: voiceoverText,
+        crop: cropSettings,
       };
 
       const job = await createJob(
@@ -88,8 +95,10 @@ export function ProcessWizard({ video, onComplete, onCancel }: ProcessWizardProp
                 <Sparkles className="text-blue-400" size={20} />
                 Select Editing Style
               </h3>
-              <p className="text-sm text-slate-400">Choose a preset or create your own rhythm.</p>
+              <p className="text-sm text-slate-400">Choose a crop, then pick a preset or create your own rhythm.</p>
             </div>
+
+            <VideoCropControl video={video} value={cropSettings} onChange={setCropSettings} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {presets.map((preset) => (

@@ -6,10 +6,11 @@ import {
   Library, Download, Play, Share2, Shield, Clock,
   CheckCircle2, Info, AlertTriangle, Loader2, ArrowRight
 } from "lucide-react";
-import { Job, useJobs } from "@/lib/hooks/use-jobs";
+import { downloadJobOutput, Job, useJobs } from "@/lib/hooks/use-jobs";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/config";
+import { toast } from "sonner";
 
 interface VaultViewProps {
   onViewResult?: (job: Job) => void;
@@ -18,6 +19,19 @@ interface VaultViewProps {
 export function VaultView({ onViewResult }: VaultViewProps) {
   const { jobs, isLoading } = useJobs();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const getDownloadHref = (url?: string | null) => {
+    if (!url) return "";
+    return url.startsWith("http") ? url : `${API_BASE}${url}`;
+  };
+
+  const handleDownload = async (job: Job) => {
+    try {
+      await downloadJobOutput(job);
+    } catch (error: any) {
+      toast.error(error.message || "Download failed");
+    }
+  };
 
   const completedJobs = jobs.filter((j) => j.status === "completed");
   const processingJobs = jobs.filter(
@@ -127,6 +141,10 @@ export function VaultView({ onViewResult }: VaultViewProps) {
             {completedJobs.map((job, idx) => {
               const risk = getRiskConfig(job.risk_level);
               const isHovered = hoveredId === job.id;
+              const downloadHref = getDownloadHref(job.download_url);
+              const isVideoOutput = Boolean(
+                job.output_filename?.toLowerCase().endsWith(".mp4") || downloadHref.toLowerCase().includes(".mp4")
+              );
               return (
                 <motion.div
                   key={job.id}
@@ -140,9 +158,9 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                   <GlassCard className="overflow-hidden border-slate-800/50 group hover:border-slate-700 transition-all duration-300">
                     {/* Video Thumbnail / Preview */}
                     <div className="relative aspect-video bg-black overflow-hidden">
-                      {job.download_url ? (
+                      {job.download_url && isVideoOutput ? (
                         <video
-                          src={job.download_url?.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`}
+                          src={downloadHref}
                           className={cn(
                             "w-full h-full object-cover transition-all duration-500",
                             isHovered ? "scale-105 opacity-90" : "scale-100 opacity-60"
@@ -154,7 +172,11 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-slate-900">
-                          <Play className="text-slate-700" size={36} />
+                          {job.download_url ? (
+                            <Info className="text-slate-700" size={36} />
+                          ) : (
+                            <Play className="text-slate-700" size={36} />
+                          )}
                         </div>
                       )}
 
@@ -163,15 +185,14 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                         "absolute inset-0 flex items-center justify-center gap-3 transition-all duration-300",
                         isHovered ? "opacity-100" : "opacity-0"
                       )}>
-                        <a
-                          href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
-                          download
+                        <button
+                          onClick={() => handleDownload(job)}
+                          disabled={!job.download_url}
                           className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur border border-white/20 text-xs font-bold hover:bg-white/20 transition-all"
-                          onClick={(e) => !job.download_url && e.preventDefault()}
                         >
                           <Download size={14} />
                           Download
-                        </a>
+                        </button>
                         {onViewResult && (
                           <button
                             onClick={() => onViewResult(job)}
@@ -222,20 +243,19 @@ export function VaultView({ onViewResult }: VaultViewProps) {
                       </div>
 
                       <div className="flex gap-2">
-                        <a
-                          href={job.download_url ? (job.download_url.startsWith("http") ? job.download_url : `${API_BASE}${job.download_url}`) : "#"}
-                          download
+                        <button
+                          onClick={() => handleDownload(job)}
+                          disabled={!job.download_url}
                           className={cn(
                             "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all",
                             job.download_url
                               ? "bg-blue-600 hover:bg-blue-500 text-white"
                               : "bg-slate-800 text-slate-500 cursor-not-allowed"
                           )}
-                          onClick={(e) => !job.download_url && e.preventDefault()}
                         >
                           <Download size={13} />
                           Save
-                        </a>
+                        </button>
                         {onViewResult && (
                           <button
                             onClick={() => onViewResult(job)}

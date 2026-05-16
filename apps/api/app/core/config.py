@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     FFPROBE_PATH: str = "ffprobe"     # override if not on PATH
     MAX_CONCURRENT_JOBS: int = 4
     JOB_TIMEOUT_SECONDS: int = 7200    # 2 hours per job
+    # 0 = let FFmpeg auto-select (all cores); set to a positive int to cap per-job CPU threads
+    FFMPEG_THREADS: int = 0
+    # Empty = CPU-only. Set "cuda" (NVIDIA) or "videotoolbox" (macOS) for GPU acceleration.
+    FFMPEG_HWACCEL: str = ""
+    # Seconds the worker waits between DB polls when the queue is empty
+    WORKER_POLL_INTERVAL_SECONDS: float = 1.0
 
     # ── Auth ─────────────────────────────────────────────────────────────────
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7   # 7 days

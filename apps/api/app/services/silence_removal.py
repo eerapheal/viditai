@@ -9,7 +9,8 @@ Algorithm:
  2. Invert the intervals to get speech/sound segments.
  3. Add `padding_seconds` on each side of every kept segment to avoid
     hard audio cuts that feel unnatural.
- 4. Concatenate segments using the concat demuxer (same as pattern_cut).
+ 4. Concatenate segments: attempt stream-copy first (fast, lossless),
+    fall back to a fast re-encode if the codec mix won't concat cleanly.
 """
 import os
 import re
@@ -28,9 +29,8 @@ def _parse_silence_log(log: str) -> list[tuple[float, float]]:
     Returns list of (silence_start, silence_end) tuples in seconds.
     """
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", log)]
-    ends   = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", log)]
+    ends   = [float(x) for x in re.findall(r"silence_end: ([\d.]+)",   log)]
 
-    # 2. Invert to keep list
     logger.debug(f"Detected {len(starts)} silent segments. Inverting...")
     segments = []
     for i, start in enumerate(starts):
@@ -52,11 +52,10 @@ def _invert_silence(
     prev = 0.0
 
     for sil_start, sil_end in silence_segs:
-        seg_end = sil_start + padding          # keep a tiny bit before silence
-        seg_start = prev - padding if prev > 0 else 0.0
-        seg_start = max(0.0, seg_start)
+        seg_end   = sil_start + padding
+        seg_start = max(0.0, prev - padding) if prev > 0 else 0.0
 
-        if seg_end > seg_start + 0.05:         # skip micro-segments < 50ms
+        if seg_end > seg_start + 0.05:          # skip micro-segments < 50 ms
             keep.append((seg_start, min(seg_end, total_duration)))
 
         prev = sil_end if sil_end is not None else total_duration
@@ -92,7 +91,6 @@ async def apply_silence_removal(
 
     # ── Step 1: detect silence ────────────────────────────────────────────────
     logger.debug("Phase 1: Detecting silence intervals...")
-    # We pipe to /dev/null; the silence log comes through stderr
     silence_log = await run_ffmpeg(
         "-i", input_path,
         "-af", f"silencedetect=noise={silence_threshold_db}dB:d={min_silence_duration}",
@@ -106,14 +104,12 @@ async def apply_silence_removal(
     silence_segs = _parse_silence_log(silence_log)
 
     if not silence_segs:
-        # No silence found — just copy the file
+        # No silence found — just stream-copy the file
         output_filename = f"{uuid.uuid4().hex}_silence_removed.mp4"
         output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
-        await run_ffmpeg(
-            "-i", input_path,
-            "-c", "copy",
-            output_path,
-        )
+        await run_ffmpeg("-i", input_path, "-c", "copy", output_path)
+        if progress_cb:
+            await progress_cb(100)
         return output_path
 
     speech_segs = _invert_silence(silence_segs, total_duration, padding_seconds)
@@ -122,13 +118,17 @@ async def apply_silence_removal(
         raise ValueError("Silence removal would eliminate the entire video. Adjust threshold.")
 
     if progress_cb:
-        await progress_cb(30)
+        await progress_cb(40)
 
     # ── Step 2: write concat list ─────────────────────────────────────────────
+    # Use SCRATCH_DIR (not UPLOAD_DIR) — this is a temporary processing artifact.
+    os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
     output_filename = f"{uuid.uuid4().hex}_silence_removed.mp4"
     output_path = os.path.join(settings.SCRATCH_DIR, output_filename)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=settings.UPLOAD_DIR) as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False, dir=settings.SCRATCH_DIR
+    ) as f:
         concat_path = f.name
         for seg_start, seg_end in speech_segs:
             f.write(f"file '{os.path.abspath(input_path)}'\n")
@@ -136,26 +136,48 @@ async def apply_silence_removal(
             f.write(f"outpoint {seg_end:.6f}\n")
 
     try:
-        if progress_cb:
-            await progress_cb(10)
-
-        # 4. Run FFmpeg concat
         logger.debug(f"Phase 2: Concatenating {len(speech_segs)} kept segments...")
-        await run_ffmpeg(
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_path,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-movflags", "+faststart",
-            output_path,
-        )
+
+        # ── Attempt 1: stream-copy (fast, lossless) ───────────────────────────
+        try:
+            await run_ffmpeg(
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_path,
+                "-map", "0",
+                "-c", "copy",
+                "-avoid_negative_ts", "make_zero",
+                "-fflags", "+genpts",
+                "-movflags", "+faststart",
+                output_path,
+            )
+            logger.debug("Silence removal: stream-copy succeeded")
+        except Exception as copy_exc:
+            logger.warning(
+                f"Silence removal stream-copy failed, falling back to fast encode: {copy_exc}"
+            )
+            # ── Attempt 2: fast re-encode fallback ────────────────────────────
+            await run_ffmpeg(
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_path,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-crf", "23",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-movflags", "+faststart",
+                output_path,
+            )
+            logger.debug("Silence removal: re-encode fallback succeeded")
+
         if progress_cb:
             await progress_cb(90)
+
     finally:
-        os.unlink(concat_path)
+        try:
+            os.unlink(concat_path)
+        except OSError:
+            pass
 
     return output_path

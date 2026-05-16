@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { AIButton } from "@/components/ui/AIButton";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { VideoCropControl, VideoCropSettings } from "@/components/dashboard/VideoCropControl";
 import {
   AudioStrategy,
   RecreationAction,
@@ -84,6 +85,11 @@ export function RecreationWizard({ video, onComplete, onCancel }: RecreationWiza
   const [transformationAllowed, setTransformationAllowed] = useState(false);
   const [youtubeAllowed, setYoutubeAllowed] = useState(false);
   const [brandOwnerConfirmed, setBrandOwnerConfirmed] = useState(false);
+  const [cropSettings, setCropSettings] = useState<VideoCropSettings>({
+    enabled: false,
+    mode: "edge_to_edge",
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+  });
 
   const wantsOwnBranding = requestedActions.includes("remove_own_branding");
   const canSubmit = useMemo(() => {
@@ -132,6 +138,7 @@ export function RecreationWizard({ video, onComplete, onCancel }: RecreationWiza
         requested_actions: requestedActions,
         audio_strategy: audioStrategy,
         include_source_audio: audioStrategy === "original_if_owned",
+        crop: cropSettings,
         own_branding: wantsOwnBranding
           ? {
               enabled: true,
@@ -203,6 +210,8 @@ export function RecreationWizard({ video, onComplete, onCancel }: RecreationWiza
           />
         </div>
       </GlassCard>
+
+      <VideoCropControl video={video} value={cropSettings} onChange={setCropSettings} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <GlassCard className="p-5 border-slate-800">

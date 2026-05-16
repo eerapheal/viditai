@@ -56,9 +56,11 @@ async def upload_video(
 ):
     """
     Upload a raw video file. Triggers auto-probe (duration, fps, resolution).
+    Streams the body to a temp file in chunks; Starlette is configured to
+    spool to disk rather than buffer in RAM for files over 1 MB.
     """
     logger.info(f"Starting upload: {file.filename} (user: {current_user.id})")
-    
+
     if file.content_type not in settings.ALLOWED_VIDEO_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,

@@ -6,9 +6,19 @@ import asyncio
 import json
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
+
 from app.core.config import settings
 from app.core.logging_config import logger
+
+# Dedicated thread pool for FFmpeg subprocesses.
+# Sized at MAX_CONCURRENT_JOBS * 2 so that each running job can have one
+# active FFmpeg call without starving other coroutines on the default pool.
+_ffmpeg_pool = ThreadPoolExecutor(
+    max_workers=max(4, settings.MAX_CONCURRENT_JOBS * 2),
+    thread_name_prefix="ffmpeg_worker",
+)
 
 
 def _sync_run_subprocess(cmd: list[str], timeout: int) -> tuple[int, str]:
@@ -23,7 +33,7 @@ def _sync_run_subprocess(cmd: list[str], timeout: int) -> tuple[int, str]:
             text=True,
             timeout=timeout,
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
         )
         logger.debug(f"Subprocess finished with exit code {result.returncode}")
         return result.returncode, result.stdout
@@ -35,17 +45,34 @@ def _sync_run_subprocess(cmd: list[str], timeout: int) -> tuple[int, str]:
         raise RuntimeError(f"Failed to execute '{cmd[0]}': {str(e)}")
 
 
+def _build_ffmpeg_cmd(*args: str) -> list[str]:
+    """
+    Assemble a full ffmpeg command with global flags injected:
+      - ``-y``          overwrite outputs without prompting
+      - ``-threads N``  CPU thread cap (0 = auto; honours FFMPEG_THREADS)
+      - ``-hwaccel X``  hardware acceleration if FFMPEG_HWACCEL is set
+    """
+    base = [settings.FFMPEG_PATH, "-y"]
+    if settings.FFMPEG_HWACCEL:
+        base += ["-hwaccel", settings.FFMPEG_HWACCEL]
+    base += ["-threads", str(settings.FFMPEG_THREADS)]
+    base += list(args)
+    return base
+
+
 async def run_ffmpeg(*args: str, timeout: int = settings.JOB_TIMEOUT_SECONDS) -> str:
     """
-    Run an ffmpeg command asynchronously using a thread pool.
+    Run an ffmpeg command asynchronously using the dedicated thread pool.
     Returns combined stdout+stderr.
-    Raises RuntimeError on non-zero error code.
+    Raises RuntimeError on non-zero exit code.
     """
-    cmd = [settings.FFMPEG_PATH, "-y", *args]
+    cmd = _build_ffmpeg_cmd(*args)
     logger.debug(f"Executing: {' '.join(cmd)}")
-    
-    # Run in a separate thread to avoid blocking the event loop
-    returncode, output = await asyncio.to_thread(_sync_run_subprocess, cmd, timeout)
+
+    loop = asyncio.get_event_loop()
+    returncode, output = await loop.run_in_executor(
+        _ffmpeg_pool, _sync_run_subprocess, cmd, timeout
+    )
 
     if returncode != 0:
         raise RuntimeError(f"FFmpeg failed (exit {returncode}):\n{output}")
@@ -54,7 +81,7 @@ async def run_ffmpeg(*args: str, timeout: int = settings.JOB_TIMEOUT_SECONDS) ->
 
 async def probe_video(file_path: str) -> dict:
     """
-    Run ffprobe on a file using a thread pool and return metadata dict.
+    Run ffprobe on a file using the dedicated thread pool and return metadata dict.
     """
     cmd = [
         settings.FFPROBE_PATH, "-v", "error",
@@ -62,9 +89,11 @@ async def probe_video(file_path: str) -> dict:
         "-show_streams", "-show_format",
         file_path,
     ]
-    
-    # Run in a separate thread
-    returncode, output_str = await asyncio.to_thread(_sync_run_subprocess, cmd, 30)
+
+    loop = asyncio.get_event_loop()
+    returncode, output_str = await loop.run_in_executor(
+        _ffmpeg_pool, _sync_run_subprocess, cmd, 30
+    )
 
     if returncode != 0:
         raise RuntimeError(
@@ -107,6 +136,7 @@ async def probe_video(file_path: str) -> dict:
         "fps": fps,
         "has_audio": audio_stream is not None,
     }
+
 
 async def generate_thumbnail(input_path: str, output_path: str, timestamp: float = 1.0) -> None:
     """Extract a single frame as a JPEG thumbnail."""

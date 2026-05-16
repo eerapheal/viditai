@@ -44,6 +44,17 @@ export type SourceTreatment =
 
 export type AudioStrategy = "mute" | "licensed_replacement" | "original_if_owned";
 
+export interface VideoCropPayload {
+  enabled: boolean;
+  mode: "edge_to_edge" | "spot_to_spot";
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
 export interface RecreationPayload {
   video_id: string;
   title?: string;
@@ -54,6 +65,7 @@ export interface RecreationPayload {
   requested_actions: RecreationAction[];
   audio_strategy: AudioStrategy;
   include_source_audio: boolean;
+  crop?: VideoCropPayload;
   own_branding?: {
     enabled: boolean;
     brand_owner_confirmed: boolean;
@@ -77,6 +89,32 @@ export interface RecreationJob {
   safety_policy: string;
   next_step: string;
   parameters: Record<string, any>;
+}
+
+export async function downloadJobOutput(job: Job) {
+  const token = Cookies.get("auth_token");
+  const response = await fetch(`${API_V1}/jobs/${job.job_id || job.id}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    const detail = error?.detail || "Output is not ready for download";
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || job.output_filename || `${job.job_type || "output"}.mp4`;
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function useJobs(videoId?: string) {

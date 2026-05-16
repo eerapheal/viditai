@@ -13,6 +13,18 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 
+# ── Starlette large-file upload fix ─────────────────────────────────────────
+# Starlette's default multipart parser buffers the entire body in memory with
+# a hard cap of 1 MB. Any video larger than that is rejected with
+# "There was an error parsing the body" before the endpoint runs.
+# We raise this to match MAX_UPLOAD_SIZE_MB from config (4 GB by default).
+from starlette.formparsers import MultiPartParser
+MultiPartParser.max_fields = 10_000
+MultiPartParser.max_files = 100
+# Some versions of Starlette/FastAPI use max_parts to limit total components
+if hasattr(MultiPartParser, "max_parts"):
+    MultiPartParser.max_parts = 10_000
+
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1 import router as api_v1_router
@@ -53,6 +65,8 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down")
     # Cleanup on shutdown (optional: purge temp files)
 
+
+_max_upload_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024  # e.g. 4 GB
 
 app = FastAPI(
     title="AutoCut AI API",

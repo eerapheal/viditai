@@ -4,9 +4,11 @@ Background processing is handled by the worker (app/worker.py).
 """
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 import uuid
+import os
 from datetime import datetime, timezone
 
 from app.core.database import get_db
@@ -212,6 +214,41 @@ async def list_jobs(
         "pages": (total + page_size - 1) // page_size,
         "items": [i.model_dump() for i in items],
     }
+
+
+@router.get("/{job_id}/download")
+async def download_job_output(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a completed job output as a file attachment."""
+    result = await db.execute(
+        select(Job).where(Job.id == job_id, Job.owner_id == current_user.id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    if job.status != JobStatus.COMPLETED or not job.output_file_path:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Job output is not ready.")
+
+    filename = job.output_filename or os.path.basename(job.output_file_path)
+    media_type = "video/mp4" if filename.lower().endswith(".mp4") else "application/octet-stream"
+
+    if settings.STORAGE_TYPE == "local":
+        file_path = os.path.abspath(job.output_file_path)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output file not found.")
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            filename=filename,
+        )
+
+    download_url = await storage_service.get_download_url(job.output_file_path)
+    if not download_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output file not found.")
+    return RedirectResponse(download_url)
 
 
 @router.get("/{job_id}", response_model=JobResponse)
